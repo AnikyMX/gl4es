@@ -1,4 +1,4 @@
-name: Build gl4es for Android (Helio P35 Fix)
+name: Build gl4es Android (Fix Path)
 
 on:
   push:
@@ -11,32 +11,33 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    # 1. Ambil Source Code
     - name: 📥 Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. Setup Android NDK (Menggunakan Official Action)
-    # Kita pakai versi r25c yang sangat stabil untuk gl4es
+    # Kita kasih ID 'setup-ndk' supaya output path-nya bisa kita panggil nanti
     - name: ⚙️ Setup Android NDK
+      id: setup-ndk
       uses: android-actions/setup-ndk@v3
       with:
         ndk-version: r25c
 
-    # 3. Install Dependencies Tambahan
-    # Memastikan 'make' dan tool build dasar tersedia
-    - name: 📦 Install Build Tools
+    - name: 📦 Install Build Essentials
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential make
 
-    # 4. Konfigurasi CMake
-    # PERBAIKAN: Menggunakan $ANDROID_NDK_HOME yang pasti valid
+    # Debugging: Cek apakah path benar-benar ada (Opsional, buat mastiin aja)
+    - name: 🔍 Check NDK Path
+      run: |
+        echo "NDK Path is: ${{ steps.setup-ndk.outputs.ndk-path }}"
+        ls -F ${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
+
     - name: 🔧 Configure CMake
       run: |
         mkdir build
         cd build
         cmake .. \
-          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+          -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
           -DANDROID_ABI=arm64-v8a \
           -DANDROID_PLATFORM=android-24 \
           -DANDROID_STL=c++_shared \
@@ -47,13 +48,11 @@ jobs:
           -G "Unix Makefiles" \
           -DCMAKE_C_FLAGS="-mcpu=cortex-a53 -mtune=cortex-a53 -ftree-vectorize -ffast-math -funwind-tables"
 
-    # 5. Proses Compile
     - name: 🔨 Build with Make
       run: |
         cd build
         make -j$(nproc)
 
-    # 6. Upload Hasil Build
     - name: 📤 Upload Artifact
       uses: actions/upload-artifact@v4
       with:
