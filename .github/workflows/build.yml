@@ -1,4 +1,4 @@
-name: Build gl4es for Android (Helio P35)
+name: Build gl4es for Android (Helio P35 Fix)
 
 on:
   push:
@@ -15,20 +15,28 @@ jobs:
     - name: 📥 Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. Setup Android NDK (Penting untuk compile C/C++ di Android)
+    # 2. Setup Android NDK (Menggunakan Official Action)
+    # Kita pakai versi r25c yang sangat stabil untuk gl4es
     - name: ⚙️ Setup Android NDK
-      uses: nttld/setup-ndk@v1
+      uses: android-actions/setup-ndk@v3
       with:
-        ndk-version: r26b # Versi NDK stabil modern
+        ndk-version: r25c
 
-    # 3. Konfigurasi CMake
-    # Kita menyuntikkan flags spesifik untuk Cortex-A53 (Helio P35)
+    # 3. Install Dependencies Tambahan
+    # Memastikan 'make' dan tool build dasar tersedia
+    - name: 📦 Install Build Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential make
+
+    # 4. Konfigurasi CMake
+    # PERBAIKAN: Menggunakan $ANDROID_NDK_HOME yang pasti valid
     - name: 🔧 Configure CMake
       run: |
         mkdir build
         cd build
         cmake .. \
-          -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
+          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
           -DANDROID_ABI=arm64-v8a \
           -DANDROID_PLATFORM=android-24 \
           -DANDROID_STL=c++_shared \
@@ -36,15 +44,16 @@ jobs:
           -DANDROID=ON \
           -DNOX11=ON \
           -DNO_GBM=ON \
+          -G "Unix Makefiles" \
           -DCMAKE_C_FLAGS="-mcpu=cortex-a53 -mtune=cortex-a53 -ftree-vectorize -ffast-math -funwind-tables"
 
-    # 4. Proses Compile
+    # 5. Proses Compile
     - name: 🔨 Build with Make
       run: |
         cd build
         make -j$(nproc)
 
-    # 5. Upload Hasil Build (libGL.so)
+    # 6. Upload Hasil Build
     - name: 📤 Upload Artifact
       uses: actions/upload-artifact@v4
       with:
