@@ -1,4 +1,4 @@
-name: Build gl4es Android (Helio P35 Ultimate)
+name: Build gl4es Android (Helio P35 Fixed Path)
 
 on:
   push:
@@ -15,8 +15,7 @@ jobs:
     - name: 📥 Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. Setup Android NDK (Pasti Valid)
-    # Kita pakai nttld versi 1 (stabil) dan NDK r25c (paling kompatibel buat gl4es)
+    # 2. Setup Android NDK (nttld r25c)
     - name: ⚙️ Setup Android NDK
       uses: nttld/setup-ndk@v1
       id: setup-ndk
@@ -24,15 +23,9 @@ jobs:
         ndk-version: r25c
 
     # 3. Konfigurasi CMake
-    # PERBAIKAN VITAL: Kita set Environment Variable secara eksplisit
-    # Flags disesuaikan strict untuk Cortex-A53 (Helio P35) + PowerVR GE8320
     - name: 🔧 Configure CMake
       run: |
-        # Set Path NDK dari output step sebelumnya
         export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
-        
-        echo "Check NDK Path: $ANDROID_NDK_HOME"
-        
         mkdir build
         cd build
         cmake .. \
@@ -53,9 +46,18 @@ jobs:
         cd build
         make -j$(nproc)
 
-    # 5. Upload Hasil Build
+    # 5. [DEBUG] Cek Lokasi File
+    # Kita list isi folder 'lib' di root untuk memastikan filenya ada
+    - name: 🔍 Check Output Files
+      run: |
+        echo "Listing root lib directory:"
+        ls -R lib/
+
+    # 6. Upload Hasil Build
+    # Menggunakan wildcard (*) untuk mengambil libGL.so, libGL.so.1, dll.
+    # Path diarahkan ke 'lib/' (bukan 'build/lib/') sesuai CMakeLists.txt
     - name: 📤 Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: gl4es-android-helio-p35
-        path: build/lib/libGL.so
+        path: lib/libGL.so*
