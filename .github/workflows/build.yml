@@ -38,13 +38,11 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
           -DANDROID_ABI=arm64-v8a \
           -DANDROID_PLATFORM=android-24 \
-          -DANDROID_STL=c++_shared \
           -DCMAKE_BUILD_TYPE=Release \
           -DANDROID=ON \
-          -DNOX11=ON \
           -DNO_GBM=ON \
           -G "Unix Makefiles" \
-          -DCMAKE_C_FLAGS="-mcpu=cortex-a53 -mtune=cortex-a53 -ftree-vectorize -ffast-math -funwind-tables"
+          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto"
         make -j$(nproc)
 
     - name: Inject Library & Create APK
