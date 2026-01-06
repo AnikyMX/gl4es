@@ -1,4 +1,4 @@
-name: Build gl4es Android (Fix Path)
+name: Build gl4es Android (Helio P35 Ultimate)
 
 on:
   push:
@@ -11,33 +11,32 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    # 1. Ambil Source Code
     - name: 📥 Checkout Repository
       uses: actions/checkout@v4
 
-    # Kita kasih ID 'setup-ndk' supaya output path-nya bisa kita panggil nanti
+    # 2. Setup Android NDK (Pasti Valid)
+    # Kita pakai nttld versi 1 (stabil) dan NDK r25c (paling kompatibel buat gl4es)
     - name: ⚙️ Setup Android NDK
+      uses: nttld/setup-ndk@v1
       id: setup-ndk
-      uses: android-actions/setup-ndk@v3
       with:
         ndk-version: r25c
 
-    - name: 📦 Install Build Essentials
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential make
-
-    # Debugging: Cek apakah path benar-benar ada (Opsional, buat mastiin aja)
-    - name: 🔍 Check NDK Path
-      run: |
-        echo "NDK Path is: ${{ steps.setup-ndk.outputs.ndk-path }}"
-        ls -F ${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
-
+    # 3. Konfigurasi CMake
+    # PERBAIKAN VITAL: Kita set Environment Variable secara eksplisit
+    # Flags disesuaikan strict untuk Cortex-A53 (Helio P35) + PowerVR GE8320
     - name: 🔧 Configure CMake
       run: |
+        # Set Path NDK dari output step sebelumnya
+        export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
+        
+        echo "Check NDK Path: $ANDROID_NDK_HOME"
+        
         mkdir build
         cd build
         cmake .. \
-          -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
+          -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
           -DANDROID_ABI=arm64-v8a \
           -DANDROID_PLATFORM=android-24 \
           -DANDROID_STL=c++_shared \
@@ -48,11 +47,13 @@ jobs:
           -G "Unix Makefiles" \
           -DCMAKE_C_FLAGS="-mcpu=cortex-a53 -mtune=cortex-a53 -ftree-vectorize -ffast-math -funwind-tables"
 
+    # 4. Proses Compile
     - name: 🔨 Build with Make
       run: |
         cd build
         make -j$(nproc)
 
+    # 5. Upload Hasil Build
     - name: 📤 Upload Artifact
       uses: actions/upload-artifact@v4
       with:
