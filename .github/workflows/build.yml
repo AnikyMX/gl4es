@@ -1,0 +1,54 @@
+name: Build GL4ES 3
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🚀 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: ⚙️ Setup Android NDK
+        uses: n0rtum/setup-ndk@v1
+        with:
+          ndk-version: r27
+          add-to-path: true
+
+      - name: 🏗️ C Build (arm64-v8a)
+        run: |
+          mkdir build && cd build
+
+          export CFLAGS="-Ofast -flto -march=armv8-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -funroll-loops -ffunction-sections -fdata-sections"
+
+          cmake .. \
+            -DCMAKE_SYSTEM_NAME=Android \
+            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+            -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
+            -DCMAKE_SYSTEM_VERSION=21 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_WORKS=1 \
+            -DANDROID=1 \
+            -DNOX11=1 \
+            -DDEFAULT_ES=2 \
+            -DCMAKE_C_FLAGS="$CFLAGS $LDFLAGS" \
+          
+          make -j$(nproc)
+
+      - name: 🛠️ Flatten, Rename & Strip
+        run: |
+          mkdir -p output
+          find build/ -name "*.so*" -exec cp {} output/libgl4es_3.so \;
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-unneeded output/libgl4es_3.so
+
+      - name: 📦 Upload Renderer
+        uses: actions/upload-artifact@v4
+        with:
+          name: gl4es-3-arm64-v8a
+          path: output/libgl4es_3.so
