@@ -1,54 +1,52 @@
-name: Build GL4ES 3
+name: Build gl4es for Android (Helio P35)
 
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
 
 jobs:
-  build-arm64:
+  build-android:
     runs-on: ubuntu-latest
     
     steps:
-      - name: 🚀 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+    # 1. Ambil Source Code
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Android NDK
-        uses: n0rtum/setup-ndk@v1
-        with:
-          ndk-version: r27
-          add-to-path: true
+    # 2. Setup Android NDK (Penting untuk compile C/C++ di Android)
+    - name: ⚙️ Setup Android NDK
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r26b # Versi NDK stabil modern
 
-      - name: 🏗️ C Build (arm64-v8a)
-        run: |
-          mkdir build && cd build
+    # 3. Konfigurasi CMake
+    # Kita menyuntikkan flags spesifik untuk Cortex-A53 (Helio P35)
+    - name: 🔧 Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. \
+          -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=arm64-v8a \
+          -DANDROID_PLATFORM=android-24 \
+          -DANDROID_STL=c++_shared \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DANDROID=ON \
+          -DNOX11=ON \
+          -DNO_GBM=ON \
+          -DCMAKE_C_FLAGS="-mcpu=cortex-a53 -mtune=cortex-a53 -ftree-vectorize -ffast-math -funwind-tables"
 
-          export CFLAGS="-Ofast -flto -march=armv8-a -mtune=cortex-a53 -mfpu=neon-vfpv4 -funroll-loops -ffunction-sections -fdata-sections"
+    # 4. Proses Compile
+    - name: 🔨 Build with Make
+      run: |
+        cd build
+        make -j$(nproc)
 
-          cmake .. \
-            -DCMAKE_SYSTEM_NAME=Android \
-            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
-            -DCMAKE_ANDROID_NDK=$ANDROID_NDK_HOME \
-            -DCMAKE_SYSTEM_VERSION=21 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_WORKS=1 \
-            -DANDROID=1 \
-            -DNOX11=1 \
-            -DDEFAULT_ES=2 \
-            -DCMAKE_C_FLAGS="$CFLAGS $LDFLAGS" \
-          
-          make -j$(nproc)
-
-      - name: 🛠️ Flatten, Rename & Strip
-        run: |
-          mkdir -p output
-          find build/ -name "*.so*" -exec cp {} output/libgl4es_3.so \;
-          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-unneeded output/libgl4es_3.so
-
-      - name: 📦 Upload Renderer
-        uses: actions/upload-artifact@v4
-        with:
-          name: gl4es-3-arm64-v8a
-          path: output/libgl4es_3.so
+    # 5. Upload Hasil Build (libGL.so)
+    - name: 📤 Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gl4es-android-helio-p35
+        path: build/lib/libGL.so
