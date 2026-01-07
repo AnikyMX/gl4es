@@ -202,18 +202,28 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
         DBG(printf(" => real VBO %d\n", buff->real_buffer);)
     }
         
-    if (buff->data && buff->size<size) {
-        free(buff->data);
-        buff->data = NULL;
+    int keep_local_copy = 1;
+    if (go_real && usage == GL_STATIC_DRAW) {
+        if (size > 1024 * 1024) {
+             keep_local_copy = 0;
+             if (buff->data) {
+                 free(buff->data);
+                 buff->data = NULL;
+             }
+        }
     }
-    if(!buff->data)
-        buff->data = malloc(size);
-    buff->size = size;
-    buff->usage = usage;
-    DBG(printf("\t buff->data = %p (size=%zd)\n", buff->data, size);)
-    buff->access = GL_READ_WRITE;
-    if (data)
-        memcpy(buff->data, data, size);
+
+    if (keep_local_copy) {
+        if (buff->data && buff->size < size) {
+            free(buff->data);
+            buff->data = NULL;
+        }
+        if (!buff->data)
+            buff->data = malloc(size);
+            
+        if (data)
+            memcpy(buff->data, data, size);
+    }
     // update binded VA
     for (int i=0; i<hardext.maxvattrib; ++i) {
         vertexattrib_t *v = &glstate->vao->vertexattrib[i];
