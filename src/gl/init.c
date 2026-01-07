@@ -252,6 +252,22 @@ void initialize_gl4es() {
 
     GetHardwareExtensions(gl4es_notest);
 
+    if(hardext.vendor & VEND_IMGTEC) {
+        if(hardext.occlusion_query) {
+            globals4es.queries = 1;
+            SHUT_LOGD("Occlusion Culling Enabled (Hardware Supported)\n");
+        } else {
+            SHUT_LOGD("Occlusion Culling Disabled (Not supported by Driver)\n");
+        }
+
+        globals4es.notexrect = 1;
+        globals4es.avoid16bits = 0;
+
+        if(hardext.npot < 3) {
+            globals4es.defaultwrap = 1;
+        }
+    }
+
 #if !defined(NO_LOADER) && !defined(NO_GBM)
     if(globals4es.usegbm)
         LoadGBMFunctions();
