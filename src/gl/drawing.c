@@ -17,6 +17,34 @@
 #define DBG(a)
 #endif
 
+static void fast_minmax_indices_us(const GLushort* indices, GLsizei count, GLsizei* max, GLsizei* min) {
+    if (count == 0) { *max=0; *min=0; return; }
+    
+    GLushort lmin = 0xFFFF;
+    GLushort lmax = 0;
+    int i = 0;
+
+    for (; i <= count - 8; i += 8) {
+        GLushort v0 = indices[i];   if (v0 < lmin) lmin = v0; if (v0 > lmax) lmax = v0;
+        GLushort v1 = indices[i+1]; if (v1 < lmin) lmin = v1; if (v1 > lmax) lmax = v1;
+        GLushort v2 = indices[i+2]; if (v2 < lmin) lmin = v2; if (v2 > lmax) lmax = v2;
+        GLushort v3 = indices[i+3]; if (v3 < lmin) lmin = v3; if (v3 > lmax) lmax = v3;
+        GLushort v4 = indices[i+4]; if (v4 < lmin) lmin = v4; if (v4 > lmax) lmax = v4;
+        GLushort v5 = indices[i+5]; if (v5 < lmin) lmin = v5; if (v5 > lmax) lmax = v5;
+        GLushort v6 = indices[i+6]; if (v6 < lmin) lmin = v6; if (v6 > lmax) lmax = v6;
+        GLushort v7 = indices[i+7]; if (v7 < lmin) lmin = v7; if (v7 > lmax) lmax = v7;
+    }
+
+    for (; i < count; i++) {
+        GLushort v = indices[i];
+        if (v < lmin) lmin = v;
+        if (v > lmax) lmax = v;
+    }
+    
+    *min = lmin;
+    *max = lmax;
+}
+
 static GLboolean is_cache_compatible(GLsizei count) {
     #define T2(AA, A, B) \
     if(glstate->vao->AA!=glstate->vao->B.enabled) return GL_FALSE; \
@@ -287,9 +315,7 @@ GLuint len_indices(const GLushort *sindices, const GLuint *iindices, GLsizei cou
 static void glDrawElementsCommon(GLenum mode, GLint first, GLsizei count, GLuint len, const GLushort *sindices, const GLuint *iindices, int instancecount) {
     if (glstate->raster.bm_drawing)
         bitmap_flush();
-
-    if (count == 0) return;
-
+    DBG(printf("glDrawElementsCommon(%s, %d, %d, %d, %p, %p, %d)\n", PrintEnum(mode), first, count, len, sindices, iindices, instancecount);)
     LOAD_GLES_FPE(glDrawElements);
     LOAD_GLES_FPE(glDrawArrays);
     LOAD_GLES_FPE(glNormalPointer);
@@ -299,9 +325,7 @@ static void glDrawElementsCommon(GLenum mode, GLint first, GLsizei count, GLuint
     LOAD_GLES_FPE(glEnable);
     LOAD_GLES_FPE(glDisable);
     LOAD_GLES_FPE(glMultiTexCoord4f);
-
-    // Helper Macro untuk Client State
-    #define client_state(A, B, C) \
+#define client_state(A, B, C) \
         if((glstate->vao->vertexattrib[A].enabled != glstate->gleshard->vertexattrib[A].enabled) || (hardext.esversion!=1)) {   \
             C                                               \
             if(glstate->vao->vertexattrib[A].enabled)       \
@@ -309,15 +333,22 @@ static void glDrawElementsCommon(GLenum mode, GLint first, GLsizei count, GLuint
             else                                            \
                 fpe_glDisableClientState(B);                \
         }
-
+#if 0
+// FEZ draw the stars (intro menu and the ones visible by night)
+// by drawing a huge list of 500k+ triangles!
+// it's a bit too much for mobile hardware, so it can be simply disabled here
+if(count>500000) return;
+#endif
     GLenum mode_init = mode;
+    /*if (glstate->polygon_mode == GL_LINE && mode>=GL_TRIANGLES)
+        mode = GL_LINE_LOOP;*/
     if (glstate->polygon_mode == GL_POINT && mode>=GL_TRIANGLES)
         mode = GL_POINTS;
+
     if (mode == GL_QUAD_STRIP)
         mode = GL_TRIANGLE_STRIP;
     if (mode == GL_POLYGON)
         mode = GL_TRIANGLE_FAN;
-
     if (mode == GL_QUADS) {
         mode = GL_TRIANGLES;
         int ilen = (count*3)/2;
@@ -325,92 +356,101 @@ static void glDrawElementsCommon(GLenum mode, GLint first, GLsizei count, GLuint
             gl4es_scratch(ilen*sizeof(GLuint));
             GLuint *tmp = (GLuint*)glstate->scratch;
             for (int i=0, j=0; i+3<count; i+=4, j+=6) {
-                tmp[j+0] = iindices[i+0]; tmp[j+1] = iindices[i+1]; tmp[j+2] = iindices[i+2];
-                tmp[j+3] = iindices[i+0]; tmp[j+4] = iindices[i+2]; tmp[j+5] = iindices[i+3];
+                tmp[j+0] = iindices[i+0];
+                tmp[j+1] = iindices[i+1];
+                tmp[j+2] = iindices[i+2];
+
+                tmp[j+3] = iindices[i+0];
+                tmp[j+4] = iindices[i+2];
+                tmp[j+5] = iindices[i+3];
             }
             iindices = tmp;
         } else {
             gl4es_scratch(ilen*sizeof(GLushort));
             GLushort *tmp = (GLushort*)glstate->scratch;
             for (int i=0, j=0; i+3<count; i+=4, j+=6) {
-                tmp[j+0] = sindices[i+0]; tmp[j+1] = sindices[i+1]; tmp[j+2] = sindices[i+2];
-                tmp[j+3] = sindices[i+0]; tmp[j+4] = sindices[i+2]; tmp[j+5] = sindices[i+3];
+                tmp[j+0] = sindices[i+0];
+                tmp[j+1] = sindices[i+1];
+                tmp[j+2] = sindices[i+2];
+
+                tmp[j+3] = sindices[i+0];
+                tmp[j+4] = sindices[i+2];
+                tmp[j+5] = sindices[i+3];
             }
             sindices = tmp;
         }
         count = ilen;
     }
-
+    // of course, GL_SELECT with shader will just not work if not using standard transformation method... Instance count is ignored also
     if (glstate->render_mode == GL_SELECT) {
+        // TODO handling uint indices
         if(!sindices && !iindices)
             select_glDrawArrays(&glstate->vao->vertexattrib[ATT_VERTEX], mode, first, count);
         else
             select_glDrawElements(&glstate->vao->vertexattrib[ATT_VERTEX], mode, count, sindices?GL_UNSIGNED_SHORT:GL_UNSIGNED_INT, sindices?((void*)sindices):((void*)iindices));
     } else {
         GLuint old_tex = glstate->texture.client;
-        realize_textures(1);
         
+        realize_textures(1);
         if(hardext.esversion==1) {
-            vertexattrib_t *p;
-            #define GetP(A) (&glstate->vao->vertexattrib[A])
-
-            client_state(ATT_COLOR, GL_COLOR_ARRAY, );
-            p = GetP(ATT_COLOR);
-            if (p->enabled) gles_glColorPointer(p->size, p->type, p->stride, p->pointer);
-            
-            client_state(ATT_NORMAL, GL_NORMAL_ARRAY, );
-            p = GetP(ATT_NORMAL);
-            if (p->enabled) gles_glNormalPointer(p->type, p->stride, p->pointer);
-            
-            client_state(ATT_VERTEX, GL_VERTEX_ARRAY, );
-            p = GetP(ATT_VERTEX);
-            if (p->enabled) gles_glVertexPointer(p->size, p->type, p->stride, p->pointer);
 
             #define TEXTURE(A) gl4es_glClientActiveTexture(A+GL_TEXTURE0);
-            #define PROCESS_TEX(aa) \
-                p = GetP(ATT_MULTITEXCOORD0+aa); \
-                const GLint itarget##aa = get_target(glstate->enable.texture[aa]); \
-                if (itarget##aa>=0) { \
-                    if (!IS_TEX2D(glstate->enable.texture[aa]) && (IS_ANYTEX(glstate->enable.texture[aa]))) { \
-                        gl4es_glActiveTexture(GL_TEXTURE0+aa); \
-                        realize_active(); \
-                        gles_glEnable(GL_TEXTURE_2D); \
-                    } \
-                    client_state(ATT_MULTITEXCOORD0+aa, GL_TEXTURE_COORD_ARRAY, TEXTURE(aa);); \
-                    if (p->enabled) { \
-                        TEXTURE(aa); \
-                        int changes = tex_setup_needchange(itarget##aa); \
-                        if(changes && !len) len = len_indices(sindices, iindices, count); \
-                        tex_setup_texcoord(len, changes, itarget##aa, p); \
-                    } else \
-                        gles_glMultiTexCoord4f(GL_TEXTURE0+aa, glstate->texcoord[aa][0], glstate->texcoord[aa][1], glstate->texcoord[aa][2], glstate->texcoord[aa][3]); \
+
+            vertexattrib_t *p;
+            #define GetP(A) (&glstate->vao->vertexattrib[A])
+            // secondary color and color sizef != 4 are "intercepted" and draw using a list, unless using ES>1.1
+            client_state(ATT_COLOR, GL_COLOR_ARRAY, );
+            p = GetP(ATT_COLOR);
+            if (p->enabled)
+                gles_glColorPointer(p->size, p->type, p->stride, p->pointer);
+            client_state(ATT_NORMAL, GL_NORMAL_ARRAY, );
+            p = GetP(ATT_NORMAL);
+            if (p->enabled)
+                gles_glNormalPointer(p->type, p->stride, p->pointer);
+            client_state(ATT_VERTEX, GL_VERTEX_ARRAY, );
+            p = GetP(ATT_VERTEX);
+            if (p->enabled)
+                gles_glVertexPointer(p->size, p->type, p->stride, p->pointer);
+            for (int aa=0; aa<hardext.maxtex; aa++) {
+                client_state(ATT_MULTITEXCOORD0+aa, GL_TEXTURE_COORD_ARRAY, TEXTURE(aa););
+                p = GetP(ATT_MULTITEXCOORD0+aa);
+                // get 1st enabled target
+                const GLint itarget = get_target(glstate->enable.texture[aa]);
+                if (itarget>=0) {
+                    if (!IS_TEX2D(glstate->enable.texture[aa]) && (IS_ANYTEX(glstate->enable.texture[aa]))) {
+                        gl4es_glActiveTexture(GL_TEXTURE0+aa);
+                        realize_active();
+                        gles_glEnable(GL_TEXTURE_2D);
+                    }
+                    if (p->enabled) {
+                        TEXTURE(aa);
+                        int changes = tex_setup_needchange(itarget);
+                        if(changes && !len) len = len_indices(sindices, iindices, count);
+                        tex_setup_texcoord(len, changes, itarget, p);
+                    } else
+                        gles_glMultiTexCoord4f(GL_TEXTURE0+aa, glstate->texcoord[aa][0], glstate->texcoord[aa][1], glstate->texcoord[aa][2], glstate->texcoord[aa][3]);
                 }
-
-            PROCESS_TEX(0);
-            PROCESS_TEX(1);
-
-            for (int aa=2; aa<hardext.maxtex; aa++) {
-                if (!glstate->vao->vertexattrib[ATT_MULTITEXCOORD0+aa].enabled && !glstate->enable.texture[aa]) 
-                    continue; 
-                PROCESS_TEX(aa);
             }
-
-            #undef PROCESS_TEX
             #undef GetP
-            
             if (glstate->texture.client!=old_tex)
                 TEXTURE(old_tex);
         }
-
-        // VBO Handling
+        // check if arrays are locked and can be put in a VBO
         if(hardext.esversion>1 && globals4es.usevbo==2 && glstate->vao->locked==1) {
+            // can now browse all enabled VA, and put the corresponding data in a VBO
+            // warning, with the use of first 
+            // Checking only Vertex Attrib for now!
+            // TODO: check all va, and take care of interleaved ones...
             ToBuffer(glstate->vao->first, glstate->vao->count);
         }
         if(hardext.esversion>1 && globals4es.usevbo==3 && (glstate->vao->locked==1 || glstate->vao->locked==2)) {
-            if(glstate->vao->locked==1) glstate->vao->locked++;
-            else ToBuffer(glstate->vao->first, glstate->vao->count);
+            if(glstate->vao->locked==1)
+                glstate->vao->locked++;
+            else
+                ToBuffer(glstate->vao->first, glstate->vao->count);
         }
 
+        // POLYGON mode as LINE is "intercepted" and drawn using list
         if(instancecount==1 || hardext.esversion==1) {
             if(!iindices && !sindices)
                 gles_glDrawArrays(mode, first, count);
@@ -426,7 +466,6 @@ static void glDrawElementsCommon(GLenum mode, GLint first, GLsizei count, GLuint
             }
         }
 
-        // Cleanup Non-2D Textures
         for (int aa=0; aa<hardext.maxtex; aa++) {
             if (!IS_TEX2D(glstate->enable.texture[aa]) && (IS_ANYTEX(glstate->enable.texture[aa]))) {
                 gl4es_glActiveTexture(GL_TEXTURE0+aa);
@@ -605,7 +644,7 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
 
-        normalize_indices_us(sindices, &max, &min, count);
+        fast_minmax_indices_us(sindices, count, &max, &min);
 
         if(globals4es.mergelist && list->stage>=STAGE_DRAW && is_list_compatible(list) && !list->use_glstate && sindices) {
             list = NewDrawStage(list, mode);
@@ -636,7 +675,7 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
             sindices = (GLushort*)malloc(count*sizeof(GLushort));
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
-        normalize_indices_us(sindices, &max, &min, count);
+        fast_minmax_indices_us(sindices, count, &max, &min);
         list = arrays_to_renderlist(list, mode, min, max + 1);
         list->indices = sindices;
         list->ilen = count;
@@ -964,7 +1003,7 @@ void APIENTRY_GL4ES gl4es_glMultiDrawElements( GLenum mode, GLsizei *counts, GLe
                 sindices = (GLushort*)malloc(count*sizeof(GLushort));
                 memcpy(sindices, tmp, count*sizeof(GLushort));
             }
-            normalize_indices_us(sindices, &max, &min, count);
+            fast_minmax_indices_us(sindices, count, &max, &min);
             list = arrays_to_renderlist(list, mode, min, max + 1);
             list->indices = sindices;
             list->ilen = count;
@@ -989,7 +1028,7 @@ void APIENTRY_GL4ES gl4es_glMultiDrawElements( GLenum mode, GLsizei *counts, GLe
                 sindices = (GLushort*)malloc(count*sizeof(GLushort));
                 memcpy(sindices, tmp, count*sizeof(GLushort));
             }
-            normalize_indices_us(sindices, &max, &min, count);
+            fast_minmax_indices_us(sindices, count, &max, &min);
             if(list) {
                 NewStage(list, STAGE_DRAW);
             }
@@ -1465,7 +1504,7 @@ void APIENTRY_GL4ES gl4es_glDrawElementsInstanced(GLenum mode, GLsizei count, GL
             sindices = (GLushort*)malloc(count*sizeof(GLushort));
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
-        normalize_indices_us(sindices, &max, &min, count);
+        fast_minmax_indices_us(sindices, count, &max, &min);
         list = arrays_to_renderlist(list, mode, min, max + 1);
         list->indices = sindices;
         list->ilen = count;
@@ -1491,7 +1530,7 @@ void APIENTRY_GL4ES gl4es_glDrawElementsInstanced(GLenum mode, GLsizei count, GL
             sindices = (GLushort*)malloc(count*sizeof(GLushort));
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
-        normalize_indices_us(sindices, &max, &min, count);
+        fast_minmax_indices_us(sindices, count, &max, &min);
         list = arrays_to_renderlist(list, mode, min, max + 1);
         list->indices = sindices;
         list->ilen = count;
