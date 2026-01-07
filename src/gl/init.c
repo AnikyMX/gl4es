@@ -255,9 +255,8 @@ void initialize_gl4es() {
     if(hardext.vendor & VEND_IMGTEC) {
         if(hardext.occlusion_query) {
             globals4es.queries = 1;
-            SHUT_LOGD("Occlusion Culling Enabled (Hardware Supported)\n");
         } else {
-            SHUT_LOGD("Occlusion Culling Disabled (Not supported by Driver)\n");
+            globals4es.queries = 0;
         }
 
         globals4es.notexrect = 1;
