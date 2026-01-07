@@ -259,6 +259,22 @@ void matrix_inverse3_transpose(const float *m, float *r) {
 }
     
 void matrix_mul(const float *a, const float *b, float *c) {
+	static const float id[16] = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+
+    if (memcmp(a, id, 64) == 0) { // 16 float * 4 byte = 64
+        if(c != b) memcpy(c, b, 64);
+        return;
+    }
+
+    if (memcmp(b, id, 64) == 0) {
+        if(c != a) memcpy(c, a, 64);
+        return;
+    }
 #if defined(__ARM_NEON__) && !defined(__APPLE__)
     const float* a1 = a+8;
 	const float* b1=b+8;
