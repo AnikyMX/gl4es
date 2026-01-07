@@ -81,7 +81,6 @@ jobs:
 
         $ZIPALIGN -v -p 4 unsigned.apk aligned.apk
 
-        # Cek Keystore & Sign
         if [ -f base_apk/my_release.keystore ]; then
             echo "Signing with Keystore..."
             
