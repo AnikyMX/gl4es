@@ -108,7 +108,7 @@ void initialize_gl4es() {
         globals4es.nobanner = IsEnvVarTrue("LIBGL_NOBANNER");
         #endif
 
-        SHUT_LOGD("Initialising gl4es\n");
+        SHUT_LOGD("Initialising GL4ES 3\n");
 
     if(!globals4es.nobanner) print_build_infos();
 
@@ -210,8 +210,6 @@ void initialize_gl4es() {
         globals4es.gl = (globals4es.es==1)?15:21;  // forcing GL 1.5 for es1.1 and GL 2.1 for es2.0
         break;
     }
-
-    SHUT_LOGD("Using GLES %s backend\n", (globals4es.es==1)?"1.1":"2.0");
 
     env(LIBGL_NODEPTHTEX, globals4es.nodepthtex, "Disable usage of Depth Textures");
 
