@@ -392,6 +392,7 @@ void initialize_gl4es() {
     env(LIBGL_VABGRA, globals4es.vabgra, "Export GL_ARB_vertex_array_bgra extension");
 
     const char *env_version = GetEnvVar("LIBGL_VERSION");
+    LOAD_GLES(glGetString);
     const char* renderer = (const char*)gles_glGetString(0x1F01);
     if(!renderer) renderer = "Unknown GPU";
     if (env_version) {
