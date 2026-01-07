@@ -135,6 +135,8 @@ void BuildExtensionsList() {
 				);
         if(!globals4es.notexrect)
             strcat(extensions, "GL_ARB_texture_rectangle ");
+        if(globals4es.queries)
+            strcat(extensions, "GL_ARB_occlusion_query ");
         if(globals4es.vabgra)
             strcat(extensions, "GL_ARB_vertex_array_bgra ");
 		if(globals4es.npot>=1)
