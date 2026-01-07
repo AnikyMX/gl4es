@@ -399,10 +399,10 @@ void initialize_gl4es() {
         SHUT_LOGD("Override version string with \"%s\" (should be in the form of \"1.x\")\n", env_version);
     }
     if(env_version) {
-        snprintf(globals4es.version, 49, "GL4ES 3 Wrapper (%s)", renderer);
+        snprintf(globals4es.version, 49, "%s GL4ES 3 Wrapper (PowerVR Rogue GE8320)", env_version);
         SHUT_LOGD("Targeting OpenGL %s\n", env_version);
     } else {
-        snprintf(globals4es.version, 49, "GL4ES 3 Wrapper (%s)", renderer);
+        snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper (PowerVR Rogue GE8320)", globals4es.gl/10, globals4es.gl%10);
         SHUT_LOGD("Targeting OpenGL %d.%d\n", globals4es.gl/10, globals4es.gl%10);
     }
 
