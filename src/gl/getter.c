@@ -252,10 +252,11 @@ const GLubyte* APIENTRY_GL4ES gl4es_glGetString(GLenum name) {
             return glstate->extensions;
 		case GL_VENDOR:
 			return (GLubyte *)"ptitSeb & AnikyMX";
-		case GL_RENDERER:
+		case GL_RENDERER: {
             static char renderer_buff[128];
             snprintf(renderer_buff, 127, "(%s)", hardext.renderer);
 			return (GLubyte *)renderer_buff;
+		}
 		case GL_SHADING_LANGUAGE_VERSION:
             if(globals4es.gl==21)
             return (GLubyte *)"1.20 via gl4es";
