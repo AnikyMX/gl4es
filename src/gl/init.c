@@ -581,7 +581,7 @@ void initialize_gl4es() {
 
 
     globals4es.fbounbind = 0;
-    if((hardext.vendor & VEND_ARM) || (hardext.vendor & VEND_IMGTEC))
+    if((hardext.vendor & VEND_ARM))
         globals4es.fbounbind = 1;
     switch(ReturnEnvVarIntDef("LIBGL_FBOUNBIND",-1)) {
       case 0:
