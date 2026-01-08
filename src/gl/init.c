@@ -581,7 +581,7 @@ void initialize_gl4es() {
 
 
     globals4es.fbounbind = 0;
-    if((hardext.vendor & VEND_ARM) || (hardext.vendor & VEND_IMGTEC))
+    if((hardext.vendor & VEND_ARM))
         globals4es.fbounbind = 1;
     switch(ReturnEnvVarIntDef("LIBGL_FBOUNBIND",-1)) {
       case 0:
@@ -602,7 +602,7 @@ void initialize_gl4es() {
     GetEnvVarInt("LIBGL_FBOFORCETEX", &globals4es.fboforcetex, globals4es.fboforcetex);
     if(globals4es.fboforcetex)
       SHUT_LOGD("Force texture for Attachment color0 on FBO\n");
-    globals4es.blitfullscreen = 1;
+    globals4es.blitfullscreen = 0;
     GetEnvVarInt("LIBGL_BLITFULLSCREEN", &globals4es.blitfullscreen, globals4es.blitfullscreen);
     if(globals4es.blitfullscreen)
       SHUT_LOGD("Hack to trigger a SwapBuffers when a Full Framebuffer Blit on default FBO is done\n");
