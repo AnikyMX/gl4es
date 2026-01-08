@@ -392,17 +392,17 @@ void initialize_gl4es() {
     env(LIBGL_VABGRA, globals4es.vabgra, "Export GL_ARB_vertex_array_bgra extension");
 
     const char *env_version = GetEnvVar("LIBGL_VERSION");
-    LOAD_GLES(glGetString);
-    const char* renderer = (const char*)gles_glGetString(0x1F01);
-    if(!renderer) renderer = "Unknown GPU";
-    if (env_version) {
-        SHUT_LOGD("Override version string with \"%s\" (should be in the form of \"1.x\")\n", env_version);
+    LOAD_GLES(glGetString);    
+    const char* renderer = NULL;
+    if(gles_glGetString) {
+        renderer = (const char*)gles_glGetString(0x1F01);
     }
+    if(!renderer) renderer = "Unknown GPU";
     if(env_version) {
-        snprintf(globals4es.version, 49, "%s GL4ES 3 Wrapper (PowerVR Rogue GE8320)", env_version);
+        snprintf(globals4es.version, 49, "%s GL4ES 3 Wrapper (%s)", env_version, renderer);
         SHUT_LOGD("Targeting OpenGL %s\n", env_version);
     } else {
-        snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper (PowerVR Rogue GE8320)", globals4es.gl/10, globals4es.gl%10);
+        snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper (%s)", globals4es.gl/10, globals4es.gl%10, renderer);
         SHUT_LOGD("Targeting OpenGL %d.%d\n", globals4es.gl/10, globals4es.gl%10);
     }
 
