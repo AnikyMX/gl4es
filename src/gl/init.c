@@ -399,10 +399,19 @@ void initialize_gl4es() {
         snprintf(globals4es.version, 49, "%s gl4es wrapper %d.%d.%d", env_version, MAJOR, MINOR, REVISION);
         SHUT_LOGD("Targeting OpenGL %s\n", env_version);
     } else {
+        const GLubyte* (*backend_GetString)(GLenum) = (void*)gles_getProcAddress("glGetString");
+        const char* renderer_name = "Unknown GPU";
+        
+        if (backend_GetString) {
+            const char* val = (const char*)backend_GetString(GL_RENDERER);
+            if (val) renderer_name = val;
+        }
+
         snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper (%s)", 
                  globals4es.gl/10, 
                  globals4es.gl%10, 
-                 (const char*)gles_glGetString(GL_RENDERER));
+                 renderer_name);
+
         SHUT_LOGD("Targeting OpenGL %d.%d\n", globals4es.gl/10, globals4es.gl%10);
     }
 
