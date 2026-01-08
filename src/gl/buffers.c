@@ -508,14 +508,6 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 		return GL_FALSE;
     }
 	noerrorShim();
-	if (buff->mapped == 2) {
-        LOAD_GLES(glUnmapBuffer);
-        bindBuffer(buff->type, buff->real_buffer);
-        GLboolean ret = gles_glUnmapBuffer(target);
-        buff->mapped = 0;
-        buff->ranged = 0;
-        return ret;
-    }
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -639,20 +631,6 @@ void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsi
     if(buff->mapped) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
-    }
-    if(hardext.esversion >= 3 && buff->real_buffer) {
-        LOAD_GLES(glMapBufferRange);
-        bindBuffer(buff->type, buff->real_buffer);
-        void* native_ptr = gles_glMapBufferRange(target, offset, length, access);
-        if(native_ptr) {
-            buff->access = access;
-            buff->mapped = 2;
-            buff->ranged = 1;
-            buff->offset = offset;
-            buff->length = length;
-            noerrorShim();
-            return native_ptr;
-        }
     }
 	buff->access = access;
 	buff->mapped = 1;

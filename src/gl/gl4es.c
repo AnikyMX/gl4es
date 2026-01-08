@@ -1025,7 +1025,7 @@ void APIENTRY_GL4ES gl4es_glFlush(void) {
     FLUSH_BEGINEND;
     if (glstate->raster.bm_drawing) bitmap_flush();
     
-    //gles_glFlush();
+    gles_glFlush();
     errorGL();
 
 #ifndef NOX11
@@ -1042,7 +1042,7 @@ void APIENTRY_GL4ES gl4es_glFinish(void) {
     FLUSH_BEGINEND;
     if (glstate->raster.bm_drawing) bitmap_flush();
     
-    //gles_glFinish();
+    gles_glFinish();
     errorGL();
 }
 AliasExport_V(void,glFinish);
