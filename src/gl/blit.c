@@ -183,18 +183,18 @@ void gl4es_blitTexture_gles2(GLuint texture,
     LOAD_GLES(glDrawArrays);
 
     if(!glstate->blit) {
-        LOAD_GLES2(glCreateShader);
-        LOAD_GLES2(glShaderSource);
-        LOAD_GLES2(glCompileShader);
-        LOAD_GLES2(glGetShaderiv);
-        LOAD_GLES2(glBindAttribLocation);
-        LOAD_GLES2(glAttachShader);
-        LOAD_GLES2(glCreateProgram);
-        LOAD_GLES2(glLinkProgram);
-        LOAD_GLES2(glGetProgramiv);
+        LOAD_GLES3(glCreateShader);
+        LOAD_GLES3(glShaderSource);
+        LOAD_GLES3(glCompileShader);
+        LOAD_GLES3(glGetShaderiv);
+        LOAD_GLES3(glBindAttribLocation);
+        LOAD_GLES3(glAttachShader);
+        LOAD_GLES3(glCreateProgram);
+        LOAD_GLES3(glLinkProgram);
+        LOAD_GLES3(glGetProgramiv);
         LOAD_GLES(glGetUniformLocation);
-        LOAD_GLES2(glUniform1i);
-        LOAD_GLES2(glUseProgram);
+        LOAD_GLES3(glUniform1i);
+        LOAD_GLES3(glUseProgram);
 
         glstate->blit = (glesblit_t*)malloc(sizeof(glesblit_t));
         memset(glstate->blit, 0, sizeof(glesblit_t));

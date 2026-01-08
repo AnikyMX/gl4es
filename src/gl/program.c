@@ -44,7 +44,7 @@ void APIENTRY_GL4ES gl4es_glAttachShader(GLuint program, GLuint shader) {
     else if(glshader->type==GL_FRAGMENT_SHADER && !glprogram->last_frag)
         glprogram->last_frag = glshader;
     // send to hadware
-    LOAD_GLES2(glAttachShader);
+    LOAD_GLES3(glAttachShader);
     if(gles_glAttachShader) {
         gles_glAttachShader(glprogram->id, glshader->id);
         errorGL();
@@ -79,7 +79,7 @@ void APIENTRY_GL4ES gl4es_glBindAttribLocation(GLuint program, GLuint index, con
     attribloc->name = strdup(name);
     attribloc->glname = attribloc->name;
     // send to hardware
-    LOAD_GLES2(glBindAttribLocation);
+    LOAD_GLES3(glBindAttribLocation);
     if(gles_glBindAttribLocation) {
         gles_glBindAttribLocation(glprogram->id, index, attribloc->name);
         errorGL();
@@ -93,7 +93,7 @@ GLuint APIENTRY_GL4ES gl4es_glCreateProgram(void) {
     static GLuint lastprogram = 0;
     GLuint program;
     // create the program
-    LOAD_GLES2(glCreateProgram);
+    LOAD_GLES3(glCreateProgram);
     if(gles_glCreateProgram) {
         program = gles_glCreateProgram();
         if(!program) {
@@ -174,7 +174,7 @@ void APIENTRY_GL4ES gl4es_glDeleteProgram(GLuint program) {
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
     // send to hardware
-    LOAD_GLES2(glDeleteProgram);
+    LOAD_GLES3(glDeleteProgram);
     if(gles_glDeleteProgram) {
         gles_glDeleteProgram(glprogram->id);
         errorGL();
@@ -203,7 +203,7 @@ void APIENTRY_GL4ES gl4es_glDetachShader(GLuint program, GLuint shader) {
         return;
     }
     // send to hardware
-    LOAD_GLES2(glDetachShader);
+    LOAD_GLES3(glDetachShader);
     if(gles_glDetachShader) {
         gles_glDetachShader(glprogram->id, glshader->id);
         errorGL();
@@ -352,7 +352,7 @@ void APIENTRY_GL4ES gl4es_glGetProgramInfoLog(GLuint program, GLsizei maxLength,
         return;
     }
 
-    LOAD_GLES2(glGetProgramInfoLog);
+    LOAD_GLES3(glGetProgramInfoLog);
     if(gles_glGetProgramInfoLog) {
         gles_glGetProgramInfoLog(glprogram->id, maxLength, length, infoLog);
         errorGL();
@@ -371,7 +371,7 @@ void APIENTRY_GL4ES gl4es_glGetProgramiv(GLuint program, GLenum pname, GLint *pa
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
 
-    LOAD_GLES2(glGetProgramiv);
+    LOAD_GLES3(glGetProgramiv);
     noerrorShim();
     switch(pname) {
         case GL_DELETE_STATUS:
@@ -527,11 +527,11 @@ static void clear_program(program_t *glprogram)
 static void fill_program(program_t *glprogram)
 {
     LOAD_GLES(glGetError);
-    LOAD_GLES2(glGetProgramiv);
-    LOAD_GLES2(glGetActiveUniform);
-    LOAD_GLES2(glGetUniformLocation);
-    LOAD_GLES2(glGetActiveAttrib);
-    LOAD_GLES2(glGetAttribLocation);
+    LOAD_GLES3(glGetProgramiv);
+    LOAD_GLES3(glGetActiveUniform);
+    LOAD_GLES3(glGetUniformLocation);
+    LOAD_GLES3(glGetActiveAttrib);
+    LOAD_GLES3(glGetAttribLocation);
     int n=0;
     int maxsize=0;
     khint_t k;
@@ -662,7 +662,7 @@ int gl4es_useProgramBinary(GLuint program, int length, GLenum format, const void
     clear_program(glprogram);
 
     LOAD_GLES_OES(glProgramBinary);
-    LOAD_GLES2(glGetProgramiv);
+    LOAD_GLES3(glGetProgramiv);
 
     gles_glProgramBinary(glprogram->id, format, binary, length);
 
@@ -688,7 +688,7 @@ int gl4es_getProgramBinary(GLuint program, int *length, GLenum *format, void** b
     noerrorShim();
 
     LOAD_GLES_OES(glGetProgramBinary);
-    LOAD_GLES2(glGetProgramiv);
+    LOAD_GLES3(glGetProgramiv);
 
     int l;
     gles_glGetProgramiv(glprogram->id, GL_PROGRAM_BINARY_LENGTH_OES, &l);
@@ -782,10 +782,10 @@ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
                 gl4es_glBindAttribLocation(glprogram->id, i, attribute);
         }
     // ok, continue with linking
-    LOAD_GLES2(glLinkProgram);
+    LOAD_GLES3(glLinkProgram);
     if(gles_glLinkProgram) {
         LOAD_GLES(glGetError);
-        LOAD_GLES2(glGetProgramiv);
+        LOAD_GLES3(glGetProgramiv);
         gles_glLinkProgram(glprogram->id);
         GLenum err = gles_glGetError();
         // Get Link Status
@@ -829,10 +829,10 @@ void APIENTRY_GL4ES gl4es_glValidateProgram(GLuint program) {
     FLUSH_BEGINEND;
     noerrorShim();
 
-    LOAD_GLES2(glValidateProgram);
+    LOAD_GLES3(glValidateProgram);
     if(gles_glValidateProgram) {
         LOAD_GLES(glGetError);
-        LOAD_GLES2(glGetProgramiv);
+        LOAD_GLES3(glGetProgramiv);
         gles_glValidateProgram(glprogram->id);
         GLenum err = gles_glGetError();
         gles_glGetProgramiv(glprogram->id, GL_VALIDATE_STATUS, (GLint *) &glprogram->valid_result);

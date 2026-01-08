@@ -20,11 +20,11 @@ hardext_t hardext = {0};
 
 static int testGLSL(const char* version, int uniformLoc) {
     // check if glsl 120 shaders are supported... by compiling one !
-    LOAD_GLES2(glCreateShader);
-    LOAD_GLES2(glShaderSource);
-    LOAD_GLES2(glCompileShader);
-    LOAD_GLES2(glGetShaderiv);
-    LOAD_GLES2(glDeleteShader);
+    LOAD_GLES3(glCreateShader);
+    LOAD_GLES3(glShaderSource);
+    LOAD_GLES3(glCompileShader);
+    LOAD_GLES3(glGetShaderiv);
+    LOAD_GLES3(glDeleteShader);
     LOAD_GLES(glGetError);
 
     GLuint shad = gles_glCreateShader(GL_VERTEX_SHADER);
@@ -44,7 +44,7 @@ static int testGLSL(const char* version, int uniformLoc) {
     gles_glGetShaderiv(shad, GL_COMPILE_STATUS, &compiled);
     /*
     if(!compiled) {
-        LOAD_GLES2(glGetShaderInfoLog)
+        LOAD_GLES3(glGetShaderInfoLog)
         char buff[500];
         gles_glGetShaderInfoLog(shad, 500, NULL, buff);
         printf("LIBGL: \"%s\" failed, message:\n%s\n", version, buff);
@@ -57,11 +57,11 @@ static int testGLSL(const char* version, int uniformLoc) {
 }
 
 static int testTextureCubeLod() {
-    LOAD_GLES2(glCreateShader);
-    LOAD_GLES2(glShaderSource);
-    LOAD_GLES2(glCompileShader);
-    LOAD_GLES2(glGetShaderiv);
-    LOAD_GLES2(glDeleteShader);
+    LOAD_GLES3(glCreateShader);
+    LOAD_GLES3(glShaderSource);
+    LOAD_GLES3(glCompileShader);
+    LOAD_GLES3(glGetShaderiv);
+    LOAD_GLES3(glDeleteShader);
     LOAD_GLES(glGetError);
 
     GLuint shad = gles_glCreateShader(GL_FRAGMENT_SHADER);
@@ -158,7 +158,7 @@ void GetHardwareExtensions(int notest)
     SHUT_LOGD("Using GLES %s backend\n", es_ver_string);
 
     // Create a PBuffer first...
-    EGLint egl_context_attrib_es2[] = {
+    EGLint egl_context_attrib_es3[] = {
         EGL_CONTEXT_CLIENT_VERSION, 3,
         EGL_NONE
     };
@@ -237,7 +237,7 @@ void GetHardwareExtensions(int notest)
         egl_eglTerminate(eglDisplay);
         return;
     }
-    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, (hardext.esversion==1) ? egl_context_attrib : egl_context_attrib_es2);    if(!eglContext) {
+    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, (hardext.esversion==1) ? egl_context_attrib : egl_context_attrib_es3);    if(!eglContext) {
         SHUT_LOGE("Error while gathering supported extension (eglCreateContext: %s), default to none\n", PrintEGLError(0));
         return;
     }
@@ -340,7 +340,7 @@ void GetHardwareExtensions(int notest)
             S("GL_OES_fragment_precision_high ", highp, 1);
             if(!hardext.highp) {
                 // check if highp is supported anyway
-                LOAD_GLES2(glGetShaderPrecisionFormat);
+                LOAD_GLES3(glGetShaderPrecisionFormat);
                 if(gles_glGetShaderPrecisionFormat) {
                     GLint range[2] = {0};
                     GLint precision=0;

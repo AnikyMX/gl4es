@@ -1138,7 +1138,7 @@ void APIENTRY_GL4ES gl4es_glGetClipPlanef(GLenum plane, GLfloat * equation)
         errorShim(GL_INVALID_ENUM);
         return;
     }
-    LOAD_GLES2(glGetClipPlanef);
+    LOAD_GLES3(glGetClipPlanef);
     if(gles_glGetClipPlanef)
     {
         errorGL();
