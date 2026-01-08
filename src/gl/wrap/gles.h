@@ -6763,3 +6763,6 @@ typedef void (APIENTRY_GLES * glVertexAttribIPointer_PTR)(glVertexAttribIPointer
 }
 #endif
 #endif
+
+typedef void* (APIENTRY_GLES * glMapBufferRange_PTR)(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
+typedef GLboolean (APIENTRY_GLES * glUnmapBuffer_PTR)(GLenum target);
