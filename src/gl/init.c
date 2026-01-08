@@ -399,12 +399,8 @@ void initialize_gl4es() {
         snprintf(globals4es.version, 49, "%s gl4es wrapper %d.%d.%d", env_version, MAJOR, MINOR, REVISION);
         SHUT_LOGD("Targeting OpenGL %s\n", env_version);
     } else {
-        snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper (%s)", 
-                 globals4es.gl/10, 
-                 globals4es.gl%10, 
-                 hardext.renderer);
-
-        SHUT_LOGD("Targeting OpenGL %d.%d\n", globals4es.gl/10, globals4es.gl%10);
+        snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper (%d.%d.%d)", globals4es.gl/10, globals4es.gl%10, MAJOR, MINOR, REVISION);
+        SHUT_LOGD("Targeting OpenGL %d.%d\n", globals4es.gl/10, globals4es.gl%10);                 
     }    
 
     if(hardext.srgb && IsEnvVarTrue("LIBGL_SRGB")) {
