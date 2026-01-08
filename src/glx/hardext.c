@@ -421,6 +421,13 @@ void GetHardwareExtensions(int notest)
     // get GLES driver signatures...
     const char *vendor = (const char *) gles_glGetString(GL_VENDOR);
     SHUT_LOGD("Hardware vendor is %s\n", vendor);
+    const char *gpu_name = (const char *) gles_glGetString(GL_RENDERER); // GL_RENDERER = 0x1F01
+    if (gpu_name) {
+        strncpy(hardext.renderer, gpu_name, 127);
+        hardext.renderer[127] = '\0'; // Safety null termination
+    } else {
+        strcpy(hardext.renderer, "Unknown GPU");
+    }
     if(strstr(vendor, "ARM"))
         hardext.vendor = VEND_ARM;
     else if(strstr(vendor, "Imagination Technologies"))
