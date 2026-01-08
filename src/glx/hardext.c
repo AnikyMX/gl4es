@@ -159,6 +159,11 @@ void GetHardwareExtensions(int notest)
         EGL_NONE
     };
 
+    EGLint egl_context_attrib_es3[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 3,
+        EGL_NONE
+    };
+
     EGLint egl_context_attrib[] = {
         EGL_NONE
     };
@@ -233,7 +238,16 @@ void GetHardwareExtensions(int notest)
         egl_eglTerminate(eglDisplay);
         return;
     }
-    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, (hardext.esversion==1)?egl_context_attrib:egl_context_attrib_es2);
+    EGLint *attrib_list;
+    if (hardext.esversion == 1) 
+        attrib_list = egl_context_attrib;
+    else if (hardext.esversion == 3) 
+        attrib_list = egl_context_attrib_es3;
+    else 
+        attrib_list = egl_context_attrib_es2;
+
+    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, attrib_list);
+
     if(!eglContext) {
         SHUT_LOGE("Error while gathering supported extension (eglCreateContext: %s), default to none\n", PrintEGLError(0));
         return;

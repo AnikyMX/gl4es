@@ -113,7 +113,7 @@ endif()
 # Android
 if(ANDROID)
     add_definitions(-DANDROID)
-    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=2)
+    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=3)
 endif()
 
 if(USE_ANDROID_LOG)
