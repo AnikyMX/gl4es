@@ -1110,4 +1110,7 @@ typedef struct __GLsync *GLsync;
 #define GL_MULTISAMPLE_BUFFER_BIT7_QCOM                         0x80000000
 #endif
 
+typedef void* (*glMapBufferOES_PTR)(GLenum target, GLenum access);
+typedef GLboolean (*glUnmapBufferOES_PTR)(GLenum target);
+
 #endif // _GL4ES_GLES_H_

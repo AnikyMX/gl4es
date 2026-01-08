@@ -17,6 +17,7 @@
 #define DBG(a)
 #endif
 
+#define GL_MAP_OES_HELPER_BIT 0x40000000
 
 KHASH_MAP_IMPL_INT(buff, glbuffer_t *);
 KHASH_MAP_IMPL_INT(glvao, glvao_t*);
@@ -396,7 +397,7 @@ static void bufferGetParameteriv(glbuffer_t* buff, GLenum value, GLint * data) {
 	noerrorShim();
 	switch (value) {
 		case GL_BUFFER_ACCESS:
-			data[0] = buff->access;
+			data[0] = buff->access & ~GL_MAP_OES_HELPER_BIT;
 			break;
 		case GL_BUFFER_ACCESS_FLAGS:
 			data[0] = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT;
@@ -464,12 +465,28 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-	buff->access = access;	// not used
+
+    if (hardext.mapbuffer && buff->real_buffer && (target==GL_ARRAY_BUFFER || target==GL_ELEMENT_ARRAY_BUFFER)) {
+        LOAD_GLES(glMapBufferOES); 
+        if (gles_glMapBufferOES) {
+             void* ptr = gles_glMapBufferOES(target, access);
+             if (ptr) {
+                 buff->access = access | GL_MAP_OES_HELPER_BIT; // Tandai buffer ini dikelola OES
+                 buff->mapped = 1;
+                 buff->ranged = 0;
+                 DBG(printf(" => Mapped via OES_mapbuffer (ptr=%p)\n", ptr);)
+                 return ptr;
+             }
+        }
+    }
+
+	buff->access = access;
 	buff->mapped = 1;
     buff->ranged = 0;
 	noerrorShim();
-	return buff->data;		// Not nice, should do some copy or something probably
+	return buff->data;
 }
+
 void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
     DBG(printf("glMapNamedBuffer(%u, %s)\n", buffer, PrintEnum(access));)
 
@@ -508,6 +525,22 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 		return GL_FALSE;
     }
 	noerrorShim();
+
+    if (buff->mapped && (buff->access & GL_MAP_OES_HELPER_BIT)) {
+        LOAD_GLES(glUnmapBufferOES);
+        GLboolean ret = GL_TRUE;
+        if (gles_glUnmapBufferOES) {
+            ret = gles_glUnmapBufferOES(target);
+        }
+
+        buff->access &= ~GL_MAP_OES_HELPER_BIT; 
+        buff->mapped = 0;
+        buff->ranged = 0;
+        
+        DBG(printf(" => Unmapped via OES_mapbuffer\n");)
+        return ret;
+    }
+
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -526,6 +559,7 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 	}
 	return GL_FALSE;
 }
+
 GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
     DBG(printf("glUnmapNamedBuffer(%u)\n", buffer);)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
