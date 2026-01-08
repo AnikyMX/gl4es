@@ -68,7 +68,7 @@ if(NOT DEFAULT_ES)
     if(PANDORA)
         set(DEFAULT_ES 1)
     else()
-        set(DEFAULT_ES 2)
+        set(DEFAULT_ES 3)
     endif()
 endif()
 
