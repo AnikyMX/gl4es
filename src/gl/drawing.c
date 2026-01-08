@@ -17,47 +17,29 @@
 #define DBG(a)
 #endif
 
-#if defined(__aarch64__)
-#include <arm_neon.h>
-#endif
-
 static void fast_minmax_indices_us(const GLushort* indices, GLsizei count, GLsizei* max, GLsizei* min) {
     if (count == 0) { *max=0; *min=0; return; }
     
-    GLushort lmin, lmax;
+    GLushort lmin = 0xFFFF;
+    GLushort lmax = 0;
+    int i = 0;
 
-#if defined(__aarch64__)
-    if (count >= 16) {
-        uint16x8_t vmin = vdupq_n_u16(0xFFFF);
-        uint16x8_t vmax = vdupq_n_u16(0);
-        
-        int i = 0;
-        for (; i <= count - 8; i += 8) {
-            uint16x8_t vdata = vld1q_u16(&indices[i]); // Load 8 indices
-            vmin = vminq_u16(vmin, vdata); // Parallel Min check
-            vmax = vmaxq_u16(vmax, vdata); // Parallel Max check
-        }
-
-        lmin = vminvq_u16(vmin);
-        lmax = vmaxvq_u16(vmax);
-
-        for (; i < count; i++) {
-            GLushort v = indices[i];
-            if (v < lmin) lmin = v;
-            if (v > lmax) lmax = v;
-        }
-    } else {
-#endif
-        lmin = 0xFFFF;
-        lmax = 0;
-        for (int i = 0; i < count; i++) {
-            GLushort v = indices[i];
-            if (v < lmin) lmin = v;
-            if (v > lmax) lmax = v;
-        }
-#if defined(__aarch64__)
+    for (; i <= count - 8; i += 8) {
+        GLushort v0 = indices[i];   if (v0 < lmin) lmin = v0; if (v0 > lmax) lmax = v0;
+        GLushort v1 = indices[i+1]; if (v1 < lmin) lmin = v1; if (v1 > lmax) lmax = v1;
+        GLushort v2 = indices[i+2]; if (v2 < lmin) lmin = v2; if (v2 > lmax) lmax = v2;
+        GLushort v3 = indices[i+3]; if (v3 < lmin) lmin = v3; if (v3 > lmax) lmax = v3;
+        GLushort v4 = indices[i+4]; if (v4 < lmin) lmin = v4; if (v4 > lmax) lmax = v4;
+        GLushort v5 = indices[i+5]; if (v5 < lmin) lmin = v5; if (v5 > lmax) lmax = v5;
+        GLushort v6 = indices[i+6]; if (v6 < lmin) lmin = v6; if (v6 > lmax) lmax = v6;
+        GLushort v7 = indices[i+7]; if (v7 < lmin) lmin = v7; if (v7 > lmax) lmax = v7;
     }
-#endif
+
+    for (; i < count; i++) {
+        GLushort v = indices[i];
+        if (v < lmin) lmin = v;
+        if (v > lmax) lmax = v;
+    }
     
     *min = lmin;
     *max = lmax;
@@ -291,8 +273,6 @@ static renderlist_t *arrays_add_renderlist(renderlist_t *a, GLenum mode,
 }
 
 static inline bool should_intercept_render(GLenum mode) {
-	if (hardext.esversion > 1 && mode == GL_TRIANGLES && !glstate->list.active)
-        return false;
     // check bounded tex that will be used if one need some transformations
     if (hardext.esversion==1)   // but only for ES1.1
     for (int aa=0; aa<hardext.maxtex; aa++) {
@@ -608,10 +588,9 @@ AliasExport(void,glDrawRangeElements,EXT,(GLenum mode,GLuint start,GLuint end,GL
 
 void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
     DBG(printf("glDrawElements(%s, %d, %s, %p), vtx=%p map=%p, pending=%d\n", PrintEnum(mode), count, PrintEnum(type), indices, (glstate->vao->vertex)?glstate->vao->vertex->data:NULL, (glstate->vao->elements)?glstate->vao->elements->data:NULL, glstate->list.pending);)
-
-    if (mode != GL_TRIANGLES) {
-        count = adjust_vertices(mode, count);
-    }
+    // TODO: split for count > 65535?
+    // special check for QUADS and TRIANGLES that need multiple of 4 or 3 vertex...
+    count = adjust_vertices(mode, count);
     
     if (count<0) {
 		errorShim(GL_INVALID_VALUE);
@@ -625,6 +604,7 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
     bool compiling = (glstate->list.active);
     bool intercept = should_intercept_render(mode);
 
+    //BATCH Mode
     if(!compiling) {
         if((!intercept && !glstate->list.pending && (count>=MIN_BATCH && count<=MAX_BATCH)) 
             || (intercept && globals4es.maxbatch)) {
@@ -638,15 +618,10 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
     GLushort *sindices = NULL;
     GLuint *iindices = NULL;
     GLuint old_index = 0;
-
-    bool support_uint = hardext.elementuint; 
-    bool direct_pass = (!compiling && !intercept);
-    
     bool need_free = !(
         (type==GL_UNSIGNED_SHORT) || 
-        (direct_pass && type==GL_UNSIGNED_INT && support_uint)
+        (!compiling && !intercept && type==GL_UNSIGNED_INT && hardext.elementuint)
         );
-
     if(need_free) {
         sindices = copy_gl_array((glstate->vao->elements)?(void*)((char*)glstate->vao->elements->data + (uintptr_t)indices):indices,
             type, 1, 0, GL_UNSIGNED_SHORT, 1, 0, count, NULL);
@@ -659,6 +634,7 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
     }
 
     if (compiling) {
+        // TODO, handle uint indices
         renderlist_t *list = glstate->list.active;
         GLsizei min, max;
 
@@ -679,16 +655,18 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
 
 		NewStage(list, STAGE_DRAW);
 
-        glstate->list.active = arrays_to_renderlist(list, mode, min, max + 1);
+        glstate->list.active = list = arrays_to_renderlist(list, mode, min, max + 1);
         list->indices = sindices;
         list->ilen = count;
         list->indice_cap = count;
+        //end_renderlist(list);
         
         NewStage(glstate->list.active, STAGE_POSTDRAW);
         return;
     }
 
     if (intercept) {
+         //TODO handling uint indices
         renderlist_t *list = NULL;
         GLsizei min, max;
 
