@@ -13,8 +13,6 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -34,8 +32,6 @@ jobs:
     - name: Build Native Library
       run: |
         export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
-        export OPT_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math"
-
         mkdir build
         cd build
         cmake .. \
@@ -46,17 +42,7 @@ jobs:
           -DANDROID=ON \
           -DNO_GBM=ON \
           -G "Unix Makefiles" \
-          -DCMAKE_C_FLAGS="$OPT_FLAGS" \
-          -DCMAKE_CXX_FLAGS="$OPT_FLAGS" \
-          -DENABLE_GLSLANG_BINARIES=OFF \
-          -DENABLE_SPVREMAPPER=OFF \
-          -DENABLE_CTEST=OFF \
-          -DENABLE_OPT=OFF \
-          -DENABLE_HLSL=OFF \
-          -DENABLE_RTTI=OFF \
-          -DENABLE_PCH=OFF \
-          -DSPIRV_CROSS_CLI=OFF \
-          -DSPIRV_CROSS_ENABLE_TESTS=OFF
+          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math"
         make -j$(nproc)
 
     - name: Inject Library & Create APK

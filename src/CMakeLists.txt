@@ -1,8 +1,5 @@
 include_directories(util)
 
-include_directories(${CMAKE_SOURCE_DIR}/external/glslang)
-include_directories(${CMAKE_SOURCE_DIR}/external/SPIRV-Cross)
-
 #file(GLOB_RECURSE GL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gl/*.c)
 SET(GL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbconverter.c
@@ -55,7 +52,6 @@ SET(GL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/samplers.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/shader.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/shaderconv.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/gl/spirv_flow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/shader_hacks.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/stack.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/stencil.c
@@ -211,12 +207,7 @@ else()
             if(AMIGAOS4)
                 target_link_libraries(GL m)
             else()
-            target_link_libraries(GL m dl 
-                spirv-cross-core    # Backend Core
-                spirv-cross-glsl    # Backend GLSL
-                glslang             # Frontend Compiler (Monolithic)
-                SPIRV               # Intermediate Representation (Jaga-jaga)
-            )
+                target_link_libraries(GL m dl)
             endif()
         else()
             target_link_libraries(GL X11 m dl)
