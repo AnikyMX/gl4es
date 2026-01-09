@@ -13,6 +13,9 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
 
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -34,6 +37,7 @@ jobs:
         export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
         mkdir build
         cd build
+
         cmake .. \
           -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
           -DANDROID_ABI=arm64-v8a \
@@ -42,7 +46,9 @@ jobs:
           -DANDROID=ON \
           -DNO_GBM=ON \
           -G "Unix Makefiles" \
-          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math"
+          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math" \
+          -DCMAKE_CXX_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math -std=c++17"
+
         make -j$(nproc)
 
     - name: Inject Library & Create APK

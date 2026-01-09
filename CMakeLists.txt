@@ -333,3 +333,15 @@ create_test(PointSprite pointsprite "0000248810" 20)
 #create_test_GLES(Neverball 2 neverball "0000078750" 200 "798x478+1+1")
 create_test_GLES(OpenRA 2 openra "0000031249" 20 "638x478+1+1")
 create_test_GLES(GLSL_lighting 2 glsl_lighting "0000505393" 20)
+
+# --- SPIR-V & GLSLANG CONFIGURATION ---
+# Matikan fitur yang tidak perlu untuk menghemat waktu build & ukuran file
+set(ENABLE_OPT OFF CACHE BOOL "Disable SPIRV-Tools optimizer" FORCE)
+set(ENABLE_HLSL OFF CACHE BOOL "Disable HLSL support" FORCE)
+set(SPIRV_CROSS_CLI OFF CACHE BOOL "Disable SPIRV-Cross CLI" FORCE)
+set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "Disable SPIRV-Cross Tests" FORCE)
+set(GLSLANG_TESTS OFF CACHE BOOL "Disable glslang tests" FORCE)
+set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "Disable glslang install" FORCE)
+
+add_subdirectory(external/glslang)
+add_subdirectory(external/SPIRV-Cross)
