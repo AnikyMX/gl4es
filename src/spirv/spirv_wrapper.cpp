@@ -157,7 +157,7 @@ char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *ne
     shader.setPreamble(preamble.c_str());
 
     // Fix: Menggunakan InitDefaultResources yang sudah kita buat
-    if (!shader.parse(&DefaultTBuiltInResource, 100, false, messages)) {
+    if (!shader.parse(&DefaultTBuiltInResource, 120, false, messages)) {
         LOGD("Parsing Failed for %s shader!", isVertex ? "Vertex" : "Fragment");
         LOGD("InfoLog: %s", shader.getInfoLog());
         LOGD("DebugLog: %s", shader.getInfoDebugLog());
