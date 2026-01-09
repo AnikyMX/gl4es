@@ -212,14 +212,10 @@ else()
                 target_link_libraries(GL m)
             else()
             target_link_libraries(GL m dl 
-                spirv-cross-core 
-                spirv-cross-glsl 
-                glslang 
-                SPIRV 
-                MachineIndependent 
-                GenericCodeGen 
-                OGLCompiler 
-                OSDependent
+                spirv-cross-core    # Backend Core
+                spirv-cross-glsl    # Backend GLSL
+                glslang             # Frontend Compiler (Monolithic)
+                SPIRV               # Intermediate Representation (Jaga-jaga)
             )
             endif()
         else()
