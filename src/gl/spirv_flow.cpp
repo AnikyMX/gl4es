@@ -5,71 +5,65 @@
 #include <vector>
 #include <iostream>
 
-// --- PERBAIKAN HEADER ADA DI SINI ---
+// Include Header
 #include <glslang/Public/ShaderLang.h>
-#include <SPIRV/GlslangToSpv.h>  // <--- Hapus "glslang/" agar path benar
-// ------------------------------------
+#include <SPIRV/GlslangToSpv.h>
 
-// Include library SPIRV-Cross (Backend)
+// Include Backend
 #include <spirv_cross.hpp>
 #include <spirv_glsl.hpp>
 
-// Setup resource limits (Standar OpenGL)
-const TBuiltInResource DefaultTBuiltInResource = {
-    /* .MaxLights = */ 32,
-    /* .MaxClipPlanes = */ 6,
-    /* .MaxTextureUnits = */ 32,
-    /* .MaxTextureCoords = */ 32,
-    /* .MaxVertexAttribs = */ 64,
-    /* .MaxVertexUniformComponents = */ 4096,
-    /* .MaxVaryingFloats = */ 64,
-    /* .MaxVertexTextureImageUnits = */ 32,
-    /* .MaxCombinedTextureImageUnits = */ 80,
-    /* .MaxTextureImageUnits = */ 32,
-    /* .MaxFragmentUniformComponents = */ 4096,
-    /* .MaxDrawBuffers = */ 32,
-    /* .MaxVertexAtomicCounters = */ 0,
-    /* .MaxTessControlAtomicCounters = */ 0,
-    /* .MaxTessEvaluationAtomicCounters = */ 0,
-    /* .MaxGeometryAtomicCounters = */ 0,
-    /* .MaxFragmentAtomicCounters = */ 8,
-    /* .MaxCombinedAtomicCounters = */ 8,
-    /* .MaxAtomicCounterBindings = */ 1,
-    /* .MaxVertexAtomicCounterBuffers = */ 0,
-    /* .MaxTessControlAtomicCounterBuffers = */ 0,
-    /* .MaxTessEvaluationAtomicCounterBuffers = */ 0,
-    /* .MaxGeometryAtomicCounterBuffers = */ 0,
-    /* .MaxFragmentAtomicCounterBuffers = */ 1,
-    /* .MaxCombinedAtomicCounterBuffers = */ 1,
-    /* .MaxAtomicCounterBufferSize = */ 16384,
-    /* .MaxTransformFeedbackBuffers = */ 4,
-    /* .MaxTransformFeedbackInterleavedComponents = */ 64,
-    /* .MaxCullDistances = */ 8,
-    /* .MaxCombinedClipAndCullDistances = */ 8,
-    /* .MaxSamples = */ 4,
-    /* .maxMeshOutputVerticesNV = */ 256,
-    /* .maxMeshOutputPrimitivesNV = */ 512,
-    /* .maxMeshWorkGroupSizeX_NV = */ 32,
-    /* .maxMeshWorkGroupSizeY_NV = */ 1,
-    /* .maxMeshWorkGroupSizeZ_NV = */ 1,
-    /* .maxTaskWorkGroupSizeX_NV = */ 32,
-    /* .maxTaskWorkGroupSizeY_NV = */ 1,
-    /* .maxTaskWorkGroupSizeZ_NV = */ 1,
-    /* .maxMeshViewCountNV = */ 4,
-    /* .limits = */ {
-        /* .nonInductiveForLoops = */ 1,
-        /* .whileLoops = */ 1,
-        /* .doWhileLoops = */ 1,
-        /* .generalUniformIndexing = */ 1,
-        /* .generalAttributeMatrixVectorIndexing = */ 1,
-        /* .generalVaryingIndexing = */ 1,
-        /* .generalSamplerIndexing = */ 1,
-        /* .generalVariableIndexing = */ 1,
-        /* .generalConstantMatrixVectorIndexing = */ 1,
-    }
-};
-
 extern "C" {
+
+// Helper: Setup Resource Limits secara manual (Anti-Error Version)
+void SetupDefaultResources(TBuiltInResource* res) {
+    // 1. Bersihkan memory (Zero out)
+    memset(res, 0, sizeof(TBuiltInResource));
+
+    // 2. Isi nilai standar OpenGL ES 3.0 / OpenGL 4.5
+    res->maxLights = 32;
+    res->maxClipPlanes = 6;
+    res->maxTextureUnits = 32;
+    res->maxTextureCoords = 32;
+    res->maxVertexAttribs = 64;
+    res->maxVertexUniformComponents = 4096;
+    res->maxVaryingFloats = 64;
+    res->maxVertexTextureImageUnits = 32;
+    res->maxCombinedTextureImageUnits = 80;
+    res->maxTextureImageUnits = 32;
+    res->maxFragmentUniformComponents = 4096;
+    res->maxDrawBuffers = 32;
+    res->maxVertexAtomicCounters = 8;
+    res->maxTessControlAtomicCounters = 8;
+    res->maxTessEvaluationAtomicCounters = 8;
+    res->maxGeometryAtomicCounters = 8;
+    res->maxFragmentAtomicCounters = 8;
+    res->maxCombinedAtomicCounters = 8;
+    res->maxAtomicCounterBindings = 1;
+    res->maxVertexAtomicCounterBuffers = 1;
+    res->maxTessControlAtomicCounterBuffers = 1;
+    res->maxTessEvaluationAtomicCounterBuffers = 1;
+    res->maxGeometryAtomicCounterBuffers = 1;
+    res->maxFragmentAtomicCounterBuffers = 1;
+    res->maxCombinedAtomicCounterBuffers = 1;
+    res->maxAtomicCounterBufferSize = 16384;
+    res->maxTransformFeedbackBuffers = 4;
+    res->maxTransformFeedbackInterleavedComponents = 64;
+    res->maxCullDistances = 8;
+    res->maxCombinedClipAndCullDistances = 8;
+    res->maxSamples = 4;
+    
+    // Limits (Bagian yang tadi error, sekarang aman)
+    res->limits.nonInductiveForLoops = 1;
+    res->limits.whileLoops = 1;
+    res->limits.doWhileLoops = 1;
+    res->limits.generalUniformIndexing = 1;
+    res->limits.generalAttributeMatrixVectorIndexing = 1;
+    res->limits.generalVaryingIndexing = 1;
+    res->limits.generalSamplerIndexing = 1;
+    res->limits.generalVariableIndexing = 1;
+    res->limits.generalConstantMatrixVectorIndexing = 1;
+}
 
 static int is_initialized = 0;
 void ensure_init() {
@@ -87,6 +81,11 @@ char* spirv_try_convert(const char* source, GLenum shaderType) {
     else if (shaderType == GL_FRAGMENT_SHADER) stage = EShLangFragment;
     else return NULL;
 
+    // --- SETUP RESOURCES ---
+    TBuiltInResource Resources;
+    SetupDefaultResources(&Resources);
+    // -----------------------
+
     glslang::TShader shader(stage);
     const char* shaderStrings[1];
     shaderStrings[0] = source;
@@ -96,7 +95,8 @@ char* spirv_try_convert(const char* source, GLenum shaderType) {
     shader.setEnvClient(glslang::EShClientOpenGL, glslang::EShTargetOpenGL_450);
     shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
 
-    if (!shader.parse(&DefaultTBuiltInResource, 100, false, EShMsgDefault)) {
+    // Pass variable 'Resources' bukan constant
+    if (!shader.parse(&Resources, 100, false, EShMsgDefault)) {
         printf("LIBGL: [SPIRV-Flow] Parse Failed:\n%s\n%s\n", shader.getInfoLog(), shader.getInfoDebugLog());
         return NULL;
     }
