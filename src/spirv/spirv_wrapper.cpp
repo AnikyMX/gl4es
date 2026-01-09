@@ -127,6 +127,7 @@ static bool glslangInitialized = false;
 
 extern "C" {
 
+__attribute__((visibility("default"))) 
 char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *need) {
     if (!glslangInitialized) {
         glslang::InitializeProcess();
