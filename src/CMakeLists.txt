@@ -70,6 +70,7 @@ SET(GL_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/gles.c
 	${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/glstub.c
 	${CMAKE_CURRENT_SOURCE_DIR}/gl/math/matheval.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/spirv/spirv_wrapper.cpp
 )
 
 SET(GL_H

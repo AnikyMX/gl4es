@@ -9,6 +9,7 @@
 #include "string_utils.h"
 #include "shader_hacks.h"
 #include "logs.h"
+#include "../spirv/spirv_wrapper.h"
 
 typedef struct {
     const char* glname;
@@ -439,6 +440,13 @@ char gl4es_VA[MAX_VATTRIB][32] = {0};
 
 char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t *need)
 {
+  if(globals4es.use_spirv) {
+      char* converted = ConvertShaderSPIRV(pEntry, isVertex, need);
+      if(converted) {
+          return converted;
+      }
+  }
+
   #define ShadAppend(S) Tmp = gl4es_append(Tmp, &tmpsize, S)
 
   if(gl_VA[0][0]=='\0') {
