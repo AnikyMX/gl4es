@@ -5,6 +5,12 @@
 #include <string>
 #include <iostream>
 
+// Include Android Log untuk debug yang pasti jalan
+#include <android/log.h>
+#define LOG_TAG "GL4ES_SPIRV"
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
 // Include header dari Library Eksternal
 #include "glslang/Public/ShaderLang.h"
 #include "SPIRV/GlslangToSpv.h"
@@ -12,136 +18,132 @@
 
 // Include header lokal
 #include "spirv_wrapper.h"
-#include "../gl/debug.h"
 #include "../gl/init.h" // Untuk akses globals4es
 
-// --- BAGIAN 1: KONFIGURASI RESOURCE (WAJIB UNTUK GLSLANG) ---
-// Ini mendefinisikan batas kemampuan GPU standar agar parser tidak bingung
-const TBuiltInResource DefaultTBuiltInResource = {
-    /* .MaxLights = */ 32,
-    /* .MaxClipPlanes = */ 6,
-    /* .MaxTextureUnits = */ 32,
-    /* .MaxTextureCoords = */ 32,
-    /* .MaxVertexAttribs = */ 64,
-    /* .MaxVertexUniformComponents = */ 4096,
-    /* .MaxVaryingFloats = */ 64,
-    /* .MaxVertexTextureImageUnits = */ 32,
-    /* .MaxCombinedTextureImageUnits = */ 80,
-    /* .MaxTextureImageUnits = */ 32,
-    /* .MaxFragmentUniformComponents = */ 4096,
-    /* .MaxDrawBuffers = */ 32,
-    /* .MaxVertexUniformVectors = */ 128,
-    /* .MaxVaryingVectors = */ 8,
-    /* .MaxFragmentUniformVectors = */ 16,
-    /* .MaxVertexOutputVectors = */ 16,
-    /* .MaxFragmentInputVectors = */ 15,
-    /* .MinProgramTexelOffset = */ -8,
-    /* .MaxProgramTexelOffset = */ 7,
-    /* .MaxClipDistances = */ 8,
-    /* .MaxComputeWorkGroupCountX = */ 65535,
-    /* .MaxComputeWorkGroupCountY = */ 65535,
-    /* .MaxComputeWorkGroupCountZ = */ 65535,
-    /* .MaxComputeWorkGroupSizeX = */ 1024,
-    /* .MaxComputeWorkGroupSizeY = */ 1024,
-    /* .MaxComputeWorkGroupSizeZ = */ 64,
-    /* .MaxComputeUniformComponents = */ 1024,
-    /* .MaxComputeTextureImageUnits = */ 16,
-    /* .MaxComputeImageUniforms = */ 8,
-    /* .MaxComputeAtomicCounters = */ 8,
-    /* .MaxComputeAtomicCounterBuffers = */ 1,
-    /* .MaxVaryingComponents = */ 60,
-    /* .MaxVertexOutputComponents = */ 64,
-    /* .MaxGeometryInputComponents = */ 64,
-    /* .MaxGeometryOutputComponents = */ 128,
-    /* .MaxFragmentInputComponents = */ 128,
-    /* .MaxImageUnits = */ 8,
-    /* .MaxCombinedImageUnitsAndFragmentOutputs = */ 8,
-    /* .MaxCombinedShaderOutputResources = */ 8,
-    /* .MaxImageSamples = */ 0,
-    /* .MaxVertexImageUniforms = */ 0,
-    /* .MaxTessControlImageUniforms = */ 0,
-    /* .MaxTessEvaluationImageUniforms = */ 0,
-    /* .MaxGeometryImageUniforms = */ 0,
-    /* .MaxFragmentImageUniforms = */ 8,
-    /* .MaxCombinedImageUniforms = */ 8,
-    /* .MaxGeometryTextureImageUnits = */ 16,
-    /* .MaxGeometryOutputVertices = */ 256,
-    /* .MaxGeometryTotalOutputComponents = */ 1024,
-    /* .MaxGeometryUniformComponents = */ 1024,
-    /* .MaxTessControlTextureImageUnits = */ 16,
-    /* .MaxTessEvaluationTextureImageUnits = */ 16,
-    /* .MaxTessControlUniformComponents = */ 1024,
-    /* .MaxTessEvaluationUniformComponents = */ 1024,
-    /* .MaxTessControlTotalOutputComponents = */ 4096,
-    /* .MaxTessEvaluationOutputComponents = */ 128,
-    /* .MaxTessGenLevel = */ 64,
-    /* .MaxViewports = */ 16,
-    /* .MaxVertexAtomicCounters = */ 0,
-    /* .MaxTessControlAtomicCounters = */ 0,
-    /* .MaxTessEvaluationAtomicCounters = */ 0,
-    /* .MaxGeometryAtomicCounters = */ 0,
-    /* .MaxFragmentAtomicCounters = */ 8,
-    /* .MaxCombinedAtomicCounters = */ 8,
-    /* .MaxAtomicCounterBindings = */ 1,
-    /* .MaxVertexAtomicCounterBuffers = */ 0,
-    /* .MaxTessControlAtomicCounterBuffers = */ 0,
-    /* .MaxTessEvaluationAtomicCounterBuffers = */ 0,
-    /* .MaxGeometryAtomicCounterBuffers = */ 0,
-    /* .MaxFragmentAtomicCounterBuffers = */ 1,
-    /* .MaxCombinedAtomicCounterBuffers = */ 1,
-    /* .MaxAtomicCounterBufferSize = */ 16384,
-    /* .MaxTransformFeedbackBuffers = */ 4,
-    /* .MaxTransformFeedbackInterleavedComponents = */ 64,
-    /* .MaxCullDistances = */ 8,
-    /* .MaxCombinedClipAndCullDistances = */ 8,
-    /* .MaxSamples = */ 4,
-    /* .maxMeshOutputVerticesNV = */ 256,
-    /* .maxMeshOutputPrimitivesNV = */ 512,
-    /* .maxMeshWorkGroupSizeX_NV = */ 32,
-    /* .maxMeshWorkGroupSizeY_NV = */ 1,
-    /* .maxMeshWorkGroupSizeZ_NV = */ 1,
-    /* .maxTaskWorkGroupSizeX_NV = */ 32,
-    /* .maxTaskWorkGroupSizeY_NV = */ 1,
-    /* .maxTaskWorkGroupSizeZ_NV = */ 1,
-    /* .maxMeshViewCountNV = */ 4,
-    /* .limits = */ {
-        /* .nonInductiveForLoops = */ 1,
-        /* .whileLoops = */ 1,
-        /* .doWhileLoops = */ 1,
-        /* .generalUniformIndexing = */ 1,
-        /* .generalAttributeMatrixVectorIndexing = */ 1,
-        /* .generalVaryingIndexing = */ 1,
-        /* .generalSamplerIndexing = */ 1,
-        /* .generalVariableIndexing = */ 1,
-        /* .generalConstantMatrixVectorIndexing = */ 1,
-    }
-};
+// Global Resource struct
+TBuiltInResource DefaultTBuiltInResource;
 
-// Global flag untuk init sekali saja
+// Fungsi untuk mengisi resource limit secara manual (Anti-Error Initializer)
+void InitDefaultResources() {
+    DefaultTBuiltInResource.maxLights = 32;
+    DefaultTBuiltInResource.maxClipPlanes = 6;
+    DefaultTBuiltInResource.maxTextureUnits = 32;
+    DefaultTBuiltInResource.maxTextureCoords = 32;
+    DefaultTBuiltInResource.maxVertexAttribs = 64;
+    DefaultTBuiltInResource.maxVertexUniformComponents = 4096;
+    DefaultTBuiltInResource.maxVaryingFloats = 64;
+    DefaultTBuiltInResource.maxVertexTextureImageUnits = 32;
+    DefaultTBuiltInResource.maxCombinedTextureImageUnits = 80;
+    DefaultTBuiltInResource.maxTextureImageUnits = 32;
+    DefaultTBuiltInResource.maxFragmentUniformComponents = 4096;
+    DefaultTBuiltInResource.maxDrawBuffers = 32;
+    DefaultTBuiltInResource.maxVertexUniformVectors = 128;
+    DefaultTBuiltInResource.maxVaryingVectors = 8;
+    DefaultTBuiltInResource.maxFragmentUniformVectors = 16;
+    DefaultTBuiltInResource.maxVertexOutputVectors = 16;
+    DefaultTBuiltInResource.maxFragmentInputVectors = 15;
+    DefaultTBuiltInResource.minProgramTexelOffset = -8;
+    DefaultTBuiltInResource.maxProgramTexelOffset = 7;
+    DefaultTBuiltInResource.maxClipDistances = 8;
+    DefaultTBuiltInResource.maxComputeWorkGroupCountX = 65535;
+    DefaultTBuiltInResource.maxComputeWorkGroupCountY = 65535;
+    DefaultTBuiltInResource.maxComputeWorkGroupCountZ = 65535;
+    DefaultTBuiltInResource.maxComputeWorkGroupSizeX = 1024;
+    DefaultTBuiltInResource.maxComputeWorkGroupSizeY = 1024;
+    DefaultTBuiltInResource.maxComputeWorkGroupSizeZ = 64;
+    DefaultTBuiltInResource.maxComputeUniformComponents = 1024;
+    DefaultTBuiltInResource.maxComputeTextureImageUnits = 16;
+    DefaultTBuiltInResource.maxComputeImageUniforms = 8;
+    DefaultTBuiltInResource.maxComputeAtomicCounters = 8;
+    DefaultTBuiltInResource.maxComputeAtomicCounterBuffers = 1;
+    DefaultTBuiltInResource.maxVaryingComponents = 60;
+    DefaultTBuiltInResource.maxVertexOutputComponents = 64;
+    DefaultTBuiltInResource.maxGeometryInputComponents = 64;
+    DefaultTBuiltInResource.maxGeometryOutputComponents = 128;
+    DefaultTBuiltInResource.maxFragmentInputComponents = 128;
+    DefaultTBuiltInResource.maxImageUnits = 8;
+    DefaultTBuiltInResource.maxCombinedImageUnitsAndFragmentOutputs = 8;
+    DefaultTBuiltInResource.maxCombinedShaderOutputResources = 8;
+    DefaultTBuiltInResource.maxImageSamples = 0;
+    DefaultTBuiltInResource.maxVertexImageUniforms = 0;
+    DefaultTBuiltInResource.maxTessControlImageUniforms = 0;
+    DefaultTBuiltInResource.maxTessEvaluationImageUniforms = 0;
+    DefaultTBuiltInResource.maxGeometryImageUniforms = 0;
+    DefaultTBuiltInResource.maxFragmentImageUniforms = 8;
+    DefaultTBuiltInResource.maxCombinedImageUniforms = 8;
+    DefaultTBuiltInResource.maxGeometryTextureImageUnits = 16;
+    DefaultTBuiltInResource.maxGeometryOutputVertices = 256;
+    DefaultTBuiltInResource.maxGeometryTotalOutputComponents = 1024;
+    DefaultTBuiltInResource.maxGeometryUniformComponents = 1024;
+    DefaultTBuiltInResource.maxTessControlTextureImageUnits = 16;
+    DefaultTBuiltInResource.maxTessEvaluationTextureImageUnits = 16;
+    DefaultTBuiltInResource.maxTessControlUniformComponents = 1024;
+    DefaultTBuiltInResource.maxTessEvaluationUniformComponents = 1024;
+    DefaultTBuiltInResource.maxTessControlTotalOutputComponents = 4096;
+    DefaultTBuiltInResource.maxTessEvaluationOutputComponents = 128;
+    DefaultTBuiltInResource.maxTessGenLevel = 64;
+    DefaultTBuiltInResource.maxViewports = 16;
+    DefaultTBuiltInResource.maxVertexAtomicCounters = 0;
+    DefaultTBuiltInResource.maxTessControlAtomicCounters = 0;
+    DefaultTBuiltInResource.maxTessEvaluationAtomicCounters = 0;
+    DefaultTBuiltInResource.maxGeometryAtomicCounters = 0;
+    DefaultTBuiltInResource.maxFragmentAtomicCounters = 8;
+    DefaultTBuiltInResource.maxCombinedAtomicCounters = 8;
+    DefaultTBuiltInResource.maxAtomicCounterBindings = 1;
+    DefaultTBuiltInResource.maxVertexAtomicCounterBuffers = 0;
+    DefaultTBuiltInResource.maxTessControlAtomicCounterBuffers = 0;
+    DefaultTBuiltInResource.maxTessEvaluationAtomicCounterBuffers = 0;
+    DefaultTBuiltInResource.maxGeometryAtomicCounterBuffers = 0;
+    DefaultTBuiltInResource.maxFragmentAtomicCounterBuffers = 1;
+    DefaultTBuiltInResource.maxCombinedAtomicCounterBuffers = 1;
+    DefaultTBuiltInResource.maxAtomicCounterBufferSize = 16384;
+    DefaultTBuiltInResource.maxTransformFeedbackBuffers = 4;
+    DefaultTBuiltInResource.maxTransformFeedbackInterleavedComponents = 64;
+    DefaultTBuiltInResource.maxCullDistances = 8;
+    DefaultTBuiltInResource.maxCombinedClipAndCullDistances = 8;
+    DefaultTBuiltInResource.maxSamples = 4;
+    DefaultTBuiltInResource.maxMeshOutputVerticesNV = 256;
+    DefaultTBuiltInResource.maxMeshOutputPrimitivesNV = 512;
+    DefaultTBuiltInResource.maxMeshWorkGroupSizeX_NV = 32;
+    DefaultTBuiltInResource.maxMeshWorkGroupSizeY_NV = 1;
+    DefaultTBuiltInResource.maxMeshWorkGroupSizeZ_NV = 1;
+    DefaultTBuiltInResource.maxTaskWorkGroupSizeX_NV = 32;
+    DefaultTBuiltInResource.maxTaskWorkGroupSizeY_NV = 1;
+    DefaultTBuiltInResource.maxTaskWorkGroupSizeZ_NV = 1;
+    DefaultTBuiltInResource.maxMeshViewCountNV = 4;
+    
+    // Limits struct assignment
+    DefaultTBuiltInResource.limits.nonInductiveForLoops = 1;
+    DefaultTBuiltInResource.limits.whileLoops = 1;
+    DefaultTBuiltInResource.limits.doWhileLoops = 1;
+    DefaultTBuiltInResource.limits.generalUniformIndexing = 1;
+    DefaultTBuiltInResource.limits.generalAttributeMatrixVectorIndexing = 1;
+    DefaultTBuiltInResource.limits.generalVaryingIndexing = 1;
+    DefaultTBuiltInResource.limits.generalSamplerIndexing = 1;
+    DefaultTBuiltInResource.limits.generalVariableIndexing = 1;
+    DefaultTBuiltInResource.limits.generalConstantMatrixVectorIndexing = 1;
+}
+
 static bool glslangInitialized = false;
 
 extern "C" {
 
 char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *need) {
-    // 1. Inisialisasi glslang (Hanya sekali seumur hidup aplikasi)
     if (!glslangInitialized) {
         glslang::InitializeProcess();
+        InitDefaultResources(); // Panggil fungsi inisialisasi manual
         glslangInitialized = true;
-        LOGD("[SPIR-V] Glslang Initialized.\n");
+        LOGD("Glslang Initialized.");
     }
 
-    // 2. Tentukan Stage (Vertex atau Fragment)
     EShLanguage stage = isVertex ? EShLangVertex : EShLangFragment;
 
-    // 3. Setup Shader Source
     glslang::TShader shader(stage);
     const char* shaderStrings[1];
     shaderStrings[0] = pEntry;
     shader.setStrings(shaderStrings, 1);
 
-    // 4. Konfigurasi Environment (Pura-pura jadi Desktop OpenGL 4.5 biar fitur lengkap)
-    // Minecraft pakai GLSL 1.20, glslang otomatis akan mendeteksi via #version 120
-    int ClientInputSemanticsVersion = 100; // Default mapping
+    int ClientInputSemanticsVersion = 100; 
     glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetOpenGL_450;
     glslang::EShTargetLanguageVersion TargetVersion = glslang::EShTargetSpv_1_0;
 
@@ -149,67 +151,57 @@ char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *ne
     shader.setEnvClient(glslang::EShClientOpenGL, ClientVersion);
     shader.setEnvTarget(glslang::EShTargetSpv, TargetVersion);
 
-    // 5. Parsing GLSL ke Intermediate AST
-    EShMessages messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules); // Mode Vulkan/SPIRV rules
+    EShMessages messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules); 
     
-    // String preprocessor (Macro definition)
     std::string preamble = "#define GL4ES 1\n"; 
     shader.setPreamble(preamble.c_str());
 
+    // Fix: Menggunakan InitDefaultResources yang sudah kita buat
     if (!shader.parse(&DefaultTBuiltInResource, 100, false, messages)) {
-        LOGD("[SPIR-V] Parsing Failed for %s shader!\n", isVertex ? "Vertex" : "Fragment");
-        LOGD("[SPIR-V] InfoLog: %s\n", shader.getInfoLog());
-        LOGD("[SPIR-V] DebugLog: %s\n", shader.getInfoDebugLog());
-        return NULL; // Gagal parse, fallback ke gl4es shaderconv
+        LOGD("Parsing Failed for %s shader!", isVertex ? "Vertex" : "Fragment");
+        LOGD("InfoLog: %s", shader.getInfoLog());
+        LOGD("DebugLog: %s", shader.getInfoDebugLog());
+        return NULL; 
     }
 
-    // 6. Linking (Wajib untuk generate SPIR-V)
     glslang::TProgram program;
     program.addShader(&shader);
 
     if (!program.link(messages)) {
-        LOGD("[SPIR-V] Linking Failed!\n");
-        LOGD("[SPIR-V] InfoLog: %s\n", program.getInfoLog());
+        LOGD("Linking Failed!");
+        LOGD("InfoLog: %s", program.getInfoLog());
         return NULL;
     }
 
-    // 7. Konversi ke SPIR-V Binary
     std::vector<unsigned int> spirv;
-    glslang::GlslangToSpirv(*program.getIntermediate(stage), spirv);
+    // Fix: Menggunakan GlslangToSpv (bukan GlslangToSpirv)
+    glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
 
     if (spirv.empty()) {
-        LOGD("[SPIR-V] Generated SPIR-V is empty!\n");
+        LOGD("Generated SPIR-V is empty!");
         return NULL;
     }
 
-    // 8. Cross-Compile: SPIR-V -> GLES 3.0 Source Code
     try {
         spirv_cross::CompilerGLSL glsl(spirv);
 
-        // Opsi Kompilasi agar sesuai dengan PowerVR/Android
         spirv_cross::CompilerGLSL::Options options;
-        options.version = 300; // GLES 3.0 (Sesuai dengan log kamu: Using GLES 3.0 backend)
-        options.es = true;     // Mode ES (Embedded Systems)
+        options.version = 300; 
+        options.es = true;     
         options.vulkan_semantics = false; 
-        options.emit_uniform_buffer_as_plain_uniforms = true; // Minecraft lama gak pake UBO
+        options.emit_uniform_buffer_as_plain_uniforms = true; 
         options.emit_push_constant_as_uniform_buffer = false; 
         
-        // Atur presisi default ke highp agar aman
         options.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Precision::Highp;
         options.fragment.default_int_precision = spirv_cross::CompilerGLSL::Options::Precision::Highp;
 
         glsl.set_common_options(options);
 
-        // Generate Source Code String
         std::string source = glsl.compile();
-
-        // 9. Kembalikan string ke C (gl4es)
-        // Kita pakai strdup karena C perlu pointer yang bisa di-free()
-        // LOGD("[SPIR-V] Success converting %s shader! (Size: %d)\n", isVertex ? "Vertex" : "Fragment", source.length());
         return strdup(source.c_str());
 
     } catch (const std::exception& e) {
-        LOGD("[SPIR-V] SPIRV-Cross Exception: %s\n", e.what());
+        LOGD("SPIRV-Cross Exception: %s", e.what());
         return NULL;
     }
 }
