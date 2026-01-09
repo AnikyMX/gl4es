@@ -5,11 +5,9 @@
 extern "C" {
 #endif
 
-// Fungsi utama untuk mengecek ketersediaan SPIR-V engine
-int is_spirv_enabled();
+#include <GLES2/gl2.h>
 
-// Nanti kita tambah fungsi konversi di sini
-// void spirv_convert(...);
+char* spirv_try_convert(const char* source, GLenum shaderType);
 
 #ifdef __cplusplus
 }
