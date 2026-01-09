@@ -76,7 +76,6 @@ typedef struct _globals4es {
  int blitfb0;
  int skiptexcopies;
  int shaderblend;
- int use_spirv;
  int deepbind;
  float fbtexscale;
  #ifndef NO_GBM

@@ -689,7 +689,6 @@ void initialize_gl4es() {
     if(hardext.shader_fbfetch) {
       env(LIBGL_SHADERBLEND, globals4es.shaderblend, "Blend will be handled in shaders");
     }
-    env(LIBGL_SPIRV, globals4es.use_spirv, "Experimental: SPIR-V Cross Shader Conversion enabled");
     if(hardext.prgbin_n>0 && !globals4es.notexarray) {
         env(LIBGL_NOPSA, globals4es.nopsa, "Don't use PrecompiledShaderArchive");
         if(globals4es.nopsa==0) {

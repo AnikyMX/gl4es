@@ -13,9 +13,6 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
-        fetch-depth: 0
 
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -37,7 +34,6 @@ jobs:
         export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
         mkdir build
         cd build
-
         cmake .. \
           -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
           -DANDROID_ABI=arm64-v8a \
@@ -46,9 +42,7 @@ jobs:
           -DANDROID=ON \
           -DNO_GBM=ON \
           -G "Unix Makefiles" \
-          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math" \
-          -DCMAKE_CXX_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math -std=c++17"
-
+          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math"
         make -j$(nproc)
 
     - name: Inject Library & Create APK
@@ -69,15 +63,8 @@ jobs:
         elif [ -f lib/libGL.so ]; then
              cp lib/libGL.so output_apk/lib/arm64-v8a/libgl4es_3.so
         else
-             echo "Build failed! Main library not found."
+             echo "Build failed! Library not found."
              exit 1
-        fi
-
-        if [ -f lib/libgl4es_spirv.so ]; then
-             echo "Found SPIR-V Module, injecting..."
-             cp lib/libgl4es_spirv.so output_apk/lib/arm64-v8a/libgl4es_spirv.so
-        else
-             echo "WARNING: SPIR-V Module not found! Building without it?"
         fi
 
         rm -f output_apk/*.keystore
