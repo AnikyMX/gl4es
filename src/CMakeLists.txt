@@ -208,7 +208,16 @@ else()
             if(AMIGAOS4)
                 target_link_libraries(GL m)
             else()
-                target_link_libraries(GL m dl spirv-cross-core spirv-cross-glsl)
+            target_link_libraries(GL m dl 
+                spirv-cross-core 
+                spirv-cross-glsl 
+                glslang 
+                SPIRV 
+                MachineIndependent 
+                GenericCodeGen 
+                OGLCompiler 
+                OSDependent
+            )
             endif()
         else()
             target_link_libraries(GL X11 m dl)
