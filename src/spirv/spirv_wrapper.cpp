@@ -8,7 +8,7 @@
 // Include header dari Library Eksternal
 #include "glslang/Public/ShaderLang.h"
 #include "SPIRV/GlslangToSpv.h"
-#include "spirv_cross/spirv_glsl.hpp"
+#include "spirv_glsl.hpp"
 
 // Include header lokal
 #include "spirv_wrapper.h"
