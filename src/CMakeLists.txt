@@ -1,14 +1,15 @@
 include_directories(util)
 
-include_directories(${CMAKE_SOURCE_DIR}/external/glslang)
-include_directories(${CMAKE_SOURCE_DIR}/external/SPIRV-Cross)
+# Hapus include global ini agar tidak mengotori library utama
+# include_directories(${CMAKE_SOURCE_DIR}/external/glslang)
+# include_directories(${CMAKE_SOURCE_DIR}/external/SPIRV-Cross)
 
 #file(GLOB_RECURSE GL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gl/*.c)
 SET(GL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbconverter.c
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/arbgenerator.c
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/arbhelper.c
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/arbparser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbgenerator.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbhelper.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbparser.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/array.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/blit.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/blend.c
@@ -69,24 +70,24 @@ SET(GL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/texture_3d.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/uniform.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/vertexattrib.c
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/gl4eswraps.c
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/gles.c
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/glstub.c
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/math/matheval.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/spirv/spirv_wrapper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/gl4eswraps.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/gles.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/wrap/glstub.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/math/matheval.c
+    # HAPUS: spirv_wrapper.cpp sudah dihapus dari sini agar library utama ringan
 )
 
 SET(GL_H
     ${CMAKE_CURRENT_SOURCE_DIR}/../version.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbconverter.h
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/arbgenerator.h
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/arbhelper.h
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/arbparser.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbgenerator.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbhelper.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbparser.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/array.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/blend.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/blit.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/buffers.h
-	${CMAKE_CURRENT_SOURCE_DIR}/gl/build_info.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/build_info.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/const.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/debug.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/decompress.h
@@ -143,16 +144,14 @@ SET(GL_H
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND NOT NO_LOADER)
     include_directories(glx)
-#    aux_source_directory(glx GLX_SOURCES)
-#    list(APPEND GL_SOURCES ${GLX_SOURCES})
     list(APPEND GL_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/glx/hardext.c
         ${CMAKE_CURRENT_SOURCE_DIR}/glx/gbm.c
-	    ${CMAKE_CURRENT_SOURCE_DIR}/glx/glx.c
-	    ${CMAKE_CURRENT_SOURCE_DIR}/glx/glx_stubs.c
-	    ${CMAKE_CURRENT_SOURCE_DIR}/glx/lookup.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/glx/glx.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/glx/glx_stubs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/glx/lookup.c
         ${CMAKE_CURRENT_SOURCE_DIR}/glx/rpi.c
-	    ${CMAKE_CURRENT_SOURCE_DIR}/glx/streaming.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/glx/streaming.c
         ${CMAKE_CURRENT_SOURCE_DIR}/glx/utils.c
     )
     list(APPEND GL_H
@@ -197,7 +196,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         add_library(OPENGL32 STATIC ${GL_SRC})
     else()
         add_library(OPENGL32 SHARED ${GL_SRC})
-        # some ES simulators used opengl32.dll :(
         set_target_properties(OPENGL32 PROPERTIES OUTPUT_NAME "GL32")
         set_target_properties(OPENGL32 PROPERTIES IMPORT_PREFIX "OPEN")
     endif()
@@ -206,44 +204,27 @@ elseif(STATICLIB)
 else()
     add_library(GL SHARED ${GL_SRC})
     
+    # --- LINKING LIBRARY UTAMA (GL) ---
+    # Kita kembalikan ke setelan ringan: HANYA m, dl, dan log.
+    # Library berat (SPIR-V) sudah dipindah ke target terpisah.
+    
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         if(NOX11)
             if(AMIGAOS4)
                 target_link_libraries(GL m)
             else()
-                target_link_libraries(GL 
-                    log 
-                    glslang 
-                    SPIRV 
-                    spirv-cross-glsl 
-                    spirv-cross-core 
-                    m 
-                    dl
-                )
+                target_link_libraries(GL m dl log)
             endif()
         else()
-            target_link_libraries(GL X11 log glslang SPIRV spirv-cross-glsl spirv-cross-core m dl)
+            target_link_libraries(GL X11 m dl log)
         endif()
     endif()
+
     if(USE_CLOCK)
         target_link_libraries(GL rt)
     endif()
     if(USE_ANDROID_LOG)
         target_link_libraries(GL ${log-lib})
-    endif()
-    if(ANDROID)
-    target_link_libraries(GL 
-        log
-
-        glslang 
-        SPIRV 
-
-        spirv-cross-glsl 
-        spirv-cross-core
-
-        m 
-        dl
-    )
     endif()
     
     if(CMAKE_SHARED_LIBRARY_SUFFIX MATCHES ".so")
@@ -257,7 +238,6 @@ else()
       DESTINATION "/usr/include/gl4es/"
     )
 endif()
-
 
 SET(EGL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/egl/egl.c
@@ -279,3 +259,30 @@ if(EGL_WRAPPER)
     endif()
 endif()
 
+# ========================================================
+# TARGET BARU: SPIR-V PLUGIN (libgl4es_spirv.so)
+# ========================================================
+if(ANDROID)
+    # 1. Definisi Library Baru dari wrapper C++ kita
+    add_library(gl4es_spirv SHARED ${CMAKE_CURRENT_SOURCE_DIR}/spirv/spirv_wrapper.cpp)
+
+    # 2. Include Path Khusus untuk Target Ini (Agar bisa baca header glslang)
+    target_include_directories(gl4es_spirv PRIVATE 
+        ${CMAKE_SOURCE_DIR}/external/glslang
+        ${CMAKE_SOURCE_DIR}/external/SPIRV-Cross
+    )
+
+    # 3. Linking "Monster" Library ke sini (Bukan ke GL utama)
+    target_link_libraries(gl4es_spirv
+        log 
+        glslang 
+        SPIRV 
+        spirv-cross-glsl 
+        spirv-cross-core
+        m 
+        dl
+    )
+    
+    # 4. Pastikan library ini juga pakai -fPIC
+    set_target_properties(gl4es_spirv PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()

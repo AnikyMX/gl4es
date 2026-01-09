@@ -69,8 +69,15 @@ jobs:
         elif [ -f lib/libGL.so ]; then
              cp lib/libGL.so output_apk/lib/arm64-v8a/libgl4es_3.so
         else
-             echo "Build failed! Library not found."
+             echo "Build failed! Main library not found."
              exit 1
+        fi
+
+        if [ -f lib/libgl4es_spirv.so ]; then
+             echo "Found SPIR-V Module, injecting..."
+             cp lib/libgl4es_spirv.so output_apk/lib/arm64-v8a/libgl4es_spirv.so
+        else
+             echo "WARNING: SPIR-V Module not found! Building without it?"
         fi
 
         rm -f output_apk/*.keystore

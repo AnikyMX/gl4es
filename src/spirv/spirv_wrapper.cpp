@@ -18,7 +18,6 @@
 
 // Include header lokal
 #include "spirv_wrapper.h"
-#include "../gl/init.h" // Untuk akses globals4es
 
 // Global Resource struct
 TBuiltInResource DefaultTBuiltInResource;

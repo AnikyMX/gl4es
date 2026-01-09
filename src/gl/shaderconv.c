@@ -9,7 +9,7 @@
 #include "string_utils.h"
 #include "shader_hacks.h"
 #include "logs.h"
-#include "../spirv/spirv_wrapper.h"
+#include <dlfcn.h>
 
 typedef struct {
     const char* glname;
@@ -441,9 +441,38 @@ char gl4es_VA[MAX_VATTRIB][32] = {0};
 char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t *need)
 {
   if(globals4es.use_spirv) {
-      char* converted = ConvertShaderSPIRV(pEntry, isVertex, need);
-      if(converted) {
-          return converted;
+      // 1. Siapkan Pointer Fungsi dan Handle Library (Static agar hanya dimuat sekali)
+      static void* spirv_lib_handle = NULL;
+      static char* (*ConvertShaderSPIRV_Func)(const char*, int, void*) = NULL;
+      static int attempted_load = 0;
+
+      // 2. Load Library jika belum dimuat
+      if (!spirv_lib_handle && !attempted_load) {
+          attempted_load = 1;
+          // Coba load library pendamping
+          spirv_lib_handle = dlopen("libgl4es_spirv.so", RTLD_LAZY | RTLD_LOCAL);
+          
+          if (spirv_lib_handle) {
+              // Ambil alamat fungsi
+              ConvertShaderSPIRV_Func = (char* (*)(const char*, int, void*))dlsym(spirv_lib_handle, "ConvertShaderSPIRV");
+              if (!ConvertShaderSPIRV_Func) {
+                  LOGD("SPIR-V Lib loaded, but function not found: %s\n", dlerror());
+                  dlclose(spirv_lib_handle);
+                  spirv_lib_handle = NULL;
+              } else {
+                  LOGD("SPIR-V Module loaded successfully!\n");
+              }
+          } else {
+              LOGD("Failed to load SPIR-V Module: %s\n", dlerror());
+          }
+      }
+
+      // 3. Eksekusi Fungsi jika Library tersedia
+      if (ConvertShaderSPIRV_Func) {
+          char* converted = ConvertShaderSPIRV_Func(pEntry, isVertex, need);
+          if(converted) {
+              return converted;
+          }
       }
   }
 
