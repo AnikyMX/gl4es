@@ -231,6 +231,20 @@ else()
     if(USE_ANDROID_LOG)
         target_link_libraries(GL ${log-lib})
     endif()
+    if(ANDROID)
+    target_link_libraries(GL 
+        log
+
+        glslang 
+        SPIRV 
+
+        spirv-cross-glsl 
+        spirv-cross-core
+
+        m 
+        dl
+    )
+    endif()
     
     if(CMAKE_SHARED_LIBRARY_SUFFIX MATCHES ".so")
         set_target_properties(GL PROPERTIES SUFFIX ".so.1")
