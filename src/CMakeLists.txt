@@ -259,20 +259,17 @@ if(EGL_WRAPPER)
     endif()
 endif()
 
-# ========================================================
-# TARGET BARU: SPIR-V PLUGIN (libgl4es_spirv.so)
-# ========================================================
 if(ANDROID)
-    # 1. Definisi Library Baru dari wrapper C++ kita
+    # 1. Definisi Library Baru
     add_library(gl4es_spirv SHARED ${CMAKE_CURRENT_SOURCE_DIR}/spirv/spirv_wrapper.cpp)
 
-    # 2. Include Path Khusus untuk Target Ini (Agar bisa baca header glslang)
+    # 2. Include Path
     target_include_directories(gl4es_spirv PRIVATE 
         ${CMAKE_SOURCE_DIR}/external/glslang
         ${CMAKE_SOURCE_DIR}/external/SPIRV-Cross
     )
 
-    # 3. Linking "Monster" Library ke sini (Bukan ke GL utama)
+    # 3. Linking "Monster" Library
     target_link_libraries(gl4es_spirv
         log 
         glslang 
@@ -283,6 +280,14 @@ if(ANDROID)
         dl
     )
     
-    # 4. Pastikan library ini juga pakai -fPIC
+    # 4. Compability Flags
     set_target_properties(gl4es_spirv PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    # --- TAMBAHAN DIET KETAT (STRIP) ---
+    # Perintah ini menyuruh Linker membuang semua debug symbol yang tidak perlu.
+    # Hasil: 47MB -> ~15-18MB
+    target_link_options(gl4es_spirv PRIVATE -Wl,-s)
+    
+    # Opsi tambahan: Garbage Collection (Buang kode glslang yang tidak terpakai)
+    target_link_options(gl4es_spirv PRIVATE -Wl,--gc-sections)
 endif()

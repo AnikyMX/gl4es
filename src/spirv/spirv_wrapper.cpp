@@ -5,24 +5,28 @@
 #include <string>
 #include <iostream>
 
-// Include Android Log untuk debug yang pasti jalan
+// Include Android Log
 #include <android/log.h>
 #define LOG_TAG "GL4ES_SPIRV"
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
-// Include header dari Library Eksternal
+// LOGE: Hanya untuk Error Fatal
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+// LOGD: MATI (Silent Mode) agar log tidak spam 45k baris lagi
+#define LOGD(...) ((void)0) 
+
+// Include Library Eksternal
 #include "glslang/Public/ShaderLang.h"
 #include "SPIRV/GlslangToSpv.h"
 #include "spirv_glsl.hpp"
 
-// Include header lokal
+// Header Lokal
 #include "spirv_wrapper.h"
 
-// Global Resource struct
+// Struct Resource Global
 TBuiltInResource DefaultTBuiltInResource;
 
-// Fungsi untuk mengisi resource limit secara manual (Anti-Error Initializer)
+// Fungsi Inisialisasi Resource (Wajib Panggil Sebelum Parse!)
 void InitDefaultResources() {
     DefaultTBuiltInResource.maxLights = 32;
     DefaultTBuiltInResource.maxClipPlanes = 6;
@@ -111,7 +115,6 @@ void InitDefaultResources() {
     DefaultTBuiltInResource.maxTaskWorkGroupSizeZ_NV = 1;
     DefaultTBuiltInResource.maxMeshViewCountNV = 4;
     
-    // Limits struct assignment
     DefaultTBuiltInResource.limits.nonInductiveForLoops = 1;
     DefaultTBuiltInResource.limits.whileLoops = 1;
     DefaultTBuiltInResource.limits.doWhileLoops = 1;
@@ -127,13 +130,15 @@ static bool glslangInitialized = false;
 
 extern "C" {
 
+// EXPORT SYMBOL: Agar libgl4es_3.so bisa melihat fungsi ini
 __attribute__((visibility("default"))) 
 char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *need) {
+    
+    // 1. Inisialisasi (Hanya Sekali)
     if (!glslangInitialized) {
         glslang::InitializeProcess();
-        InitDefaultResources(); // Panggil fungsi inisialisasi manual
+        InitDefaultResources(); // <-- VITAL! Mengisi Resource agar tidak crash
         glslangInitialized = true;
-        LOGD("Glslang Initialized.");
     }
 
     EShLanguage stage = isVertex ? EShLangVertex : EShLangFragment;
@@ -143,6 +148,8 @@ char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *ne
     shaderStrings[0] = pEntry;
     shader.setStrings(shaderStrings, 1);
 
+    // 2. SETUP ENVIRONMENT (VERSI 120 DESKTOP)
+    // Jangan ubah jadi 100, nanti crash built-ins lagi!
     int ClientInputSemanticsVersion = 120; 
     glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetOpenGL_450;
     glslang::EShTargetLanguageVersion TargetVersion = glslang::EShTargetSpv_1_0;
@@ -151,16 +158,19 @@ char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *ne
     shader.setEnvClient(glslang::EShClientOpenGL, ClientVersion);
     shader.setEnvTarget(glslang::EShTargetSpv, TargetVersion);
 
-    EShMessages messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules); 
+    // 3. RULES (HANYA SPIR-V, TANPA VULKAN)
+    // Menghapus EShMsgVulkanRules mencegah crash 'double not supported'
+    EShMessages messages = (EShMessages)(EShMsgSpvRules); 
     
     std::string preamble = "#define GL4ES 1\n"; 
     shader.setPreamble(preamble.c_str());
 
-    // Fix: Menggunakan InitDefaultResources yang sudah kita buat
+    // 4. PARSING (VERSI 120)
+    // Ini kunci untuk menghentikan dump 45.000 baris!
     if (!shader.parse(&DefaultTBuiltInResource, 120, false, messages)) {
-        LOGD("Parsing Failed for %s shader!", isVertex ? "Vertex" : "Fragment");
-        LOGD("InfoLog: %s", shader.getInfoLog());
-        LOGD("DebugLog: %s", shader.getInfoDebugLog());
+        LOGE("Parsing Failed for %s shader!", isVertex ? "Vertex" : "Fragment");
+        LOGE("InfoLog: %s", shader.getInfoLog());
+        // DebugLog tidak diprint agar tidak spam built-ins
         return NULL; 
     }
 
@@ -168,25 +178,25 @@ char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *ne
     program.addShader(&shader);
 
     if (!program.link(messages)) {
-        LOGD("Linking Failed!");
-        LOGD("InfoLog: %s", program.getInfoLog());
+        LOGE("Linking Failed!");
+        LOGE("InfoLog: %s", program.getInfoLog());
         return NULL;
     }
 
     std::vector<unsigned int> spirv;
-    // Fix: Menggunakan GlslangToSpv (bukan GlslangToSpirv)
     glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
 
     if (spirv.empty()) {
-        LOGD("Generated SPIR-V is empty!");
+        LOGE("Generated SPIR-V is empty!");
         return NULL;
     }
 
+    // 5. SPIRV-CROSS (REKONSTRUKSI KE GLES 3.0)
     try {
         spirv_cross::CompilerGLSL glsl(spirv);
 
         spirv_cross::CompilerGLSL::Options options;
-        options.version = 300; 
+        options.version = 300; // GLES 3.0
         options.es = true;     
         options.vulkan_semantics = false; 
         options.emit_uniform_buffer_as_plain_uniforms = true; 
@@ -201,7 +211,7 @@ char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *ne
         return strdup(source.c_str());
 
     } catch (const std::exception& e) {
-        LOGD("SPIRV-Cross Exception: %s", e.what());
+        LOGE("SPIRV-Cross Exception: %s", e.what());
         return NULL;
     }
 }
