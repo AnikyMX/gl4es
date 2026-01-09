@@ -1,5 +1,8 @@
 include_directories(util)
 
+include_directories(${CMAKE_SOURCE_DIR}/external/glslang)
+include_directories(${CMAKE_SOURCE_DIR}/external/SPIRV-Cross)
+
 #file(GLOB_RECURSE GL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gl/*.c)
 SET(GL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbconverter.c
