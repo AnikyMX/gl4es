@@ -143,7 +143,7 @@ char* ConvertShaderSPIRV(const char* pEntry, int isVertex, shaderconv_need_t *ne
     shaderStrings[0] = pEntry;
     shader.setStrings(shaderStrings, 1);
 
-    int ClientInputSemanticsVersion = 100; 
+    int ClientInputSemanticsVersion = 120; 
     glslang::EShTargetClientVersion ClientVersion = glslang::EShTargetOpenGL_450;
     glslang::EShTargetLanguageVersion TargetVersion = glslang::EShTargetSpv_1_0;
 
