@@ -52,6 +52,7 @@ SET(GL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/samplers.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/shader.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/shaderconv.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/gl/spirv_flow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/shader_hacks.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/stack.c
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/stencil.c
@@ -207,7 +208,7 @@ else()
             if(AMIGAOS4)
                 target_link_libraries(GL m)
             else()
-                target_link_libraries(GL m dl)
+                target_link_libraries(GL m dl spirv-cross-core spirv-cross-glsl)
             endif()
         else()
             target_link_libraries(GL X11 m dl)

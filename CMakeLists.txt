@@ -3,8 +3,10 @@ cmake_minimum_required(VERSION 2.8.12...3.10)
 # Import modules
 include(CheckCompilerFlag)
 
-project(gl4es LANGUAGES C)
+project(gl4es LANGUAGES C CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib)
@@ -333,3 +335,13 @@ create_test(PointSprite pointsprite "0000248810" 20)
 #create_test_GLES(Neverball 2 neverball "0000078750" 200 "798x478+1+1")
 create_test_GLES(OpenRA 2 openra "0000031249" 20 "638x478+1+1")
 create_test_GLES(GLSL_lighting 2 glsl_lighting "0000505393" 20)
+
+option(SPIRV_CROSS_CLI "Build CLI" OFF)
+option(SPIRV_CROSS_ENABLE_TESTS "Enable tests" OFF)
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/external/SPIRV-Cross/CMakeLists.txt")
+    message(STATUS "Integrating SPIRV-Cross Submodule...")
+    add_subdirectory(external/SPIRV-Cross)
+else()
+    message(WARNING "SPIRV-Cross folder not found! Did you run git submodule update?")
+endif()
