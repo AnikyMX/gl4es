@@ -47,7 +47,16 @@ jobs:
           -DNO_GBM=ON \
           -G "Unix Makefiles" \
           -DCMAKE_C_FLAGS="$OPT_FLAGS" \
-          -DCMAKE_CXX_FLAGS="$OPT_FLAGS"
+          -DCMAKE_CXX_FLAGS="$OPT_FLAGS" \
+          -DENABLE_GLSLANG_BINARIES=OFF \
+          -DENABLE_SPVREMAPPER=OFF \
+          -DENABLE_CTEST=OFF \
+          -DENABLE_OPT=OFF \
+          -DENABLE_HLSL=OFF \
+          -DENABLE_RTTI=OFF \
+          -DENABLE_PCH=OFF \
+          -DSPIRV_CROSS_CLI=OFF \
+          -DSPIRV_CROSS_ENABLE_TESTS=OFF
         make -j$(nproc)
 
     - name: Inject Library & Create APK
