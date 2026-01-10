@@ -1,24 +1,34 @@
-#pragma once
 #ifndef GLSL_OPTIMIZER_H
 #define GLSL_OPTIMIZER_H
 
 /*
+  [INJEKSI] C COMPATIBILITY BLOCK
+  Bagian ini ditambahkan agar header ini bisa dibaca oleh shaderconv.c (Bahasa C)
+  tanpa menyebabkan error "must use struct/enum tag" atau "unknown type bool".
+*/
+#ifndef __cplusplus
+    #include <stdbool.h>
+    /* Definisi Type agar C bisa memanggil tanpa keyword struct/enum */
+    typedef struct glslopt_shader glslopt_shader;
+    typedef struct glslopt_ctx glslopt_ctx;
+    typedef enum glslopt_shader_type glslopt_shader_type;
+    typedef enum glslopt_options glslopt_options;
+    typedef enum glslopt_target glslopt_target;
+    typedef enum glslopt_basic_type glslopt_basic_type;
+    typedef enum glslopt_precision glslopt_precision;
+#endif
+
+/* [INJEKSI] EXTERN C
+   Wajib ada agar Compiler C++ tidak mengacak nama fungsi (Name Mangling),
+   sehingga gl4es bisa memanggil fungsinya.
+*/
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*
  Main GLSL optimizer interface.
  See ../../README.md for more instructions.
-
- General usage:
-
- ctx = glslopt_initialize();
- for (lots of shaders) {
-   shader = glslopt_optimize (ctx, shaderType, shaderSource, options);
-   if (glslopt_get_status (shader)) {
-     newSource = glslopt_get_output (shader);
-   } else {
-     errorLog = glslopt_get_log (shader);
-   }
-   glslopt_shader_delete (shader);
- }
- glslopt_cleanup (ctx);
 */
 
 struct glslopt_shader;
@@ -56,6 +66,7 @@ enum glslopt_basic_type {
 	kGlslTypeOther,
 	kGlslTypeCount
 };
+
 enum glslopt_precision {
 	kGlslPrecHigh = 0,
 	kGlslPrecMedium,
@@ -87,5 +98,8 @@ void glslopt_shader_get_texture_desc (glslopt_shader* shader, int index, const c
 // Number of math, texture and flow control instructions.
 void glslopt_shader_get_stats (glslopt_shader* shader, int* approxMath, int* approxTex, int* approxFlow);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* GLSL_OPTIMIZER_H */
