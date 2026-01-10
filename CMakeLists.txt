@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12...3.10)
+cmake_minimum_required(VERSION 3.18...3.30)
 
 # Import modules
 include(CheckCompilerFlag)
