@@ -1,5 +1,5 @@
 #include "shaderconv.h"
-#include "../optimizer/glsl_optimizer.h"
+
 #include <stdio.h>
 #include "../glx/hardext.h"
 #include "debug.h"
@@ -436,45 +436,6 @@ static const char* gl4es_VertexAttrib = "_gl4es_VertexAttrib_";
 
 char gl_VA[MAX_VATTRIB][32] = {0};
 char gl4es_VA[MAX_VATTRIB][32] = {0};
-
-static char* OptimizeShader(char* source, int is_vertex) {
-    if (!source) return NULL;
-
-    // 1. Inisialisasi Context Optimizer
-    // Kita gunakan kGlslTargetOpenGLES20 agar kompatibel dengan PowerVR GE8320
-    glslopt_ctx* ctx = glslopt_initialize(kGlslTargetOpenGLES20);
-    if(!ctx) {
-        printf("LIBGL: Failed to initialize glsl-optimizer!\n");
-        return source; 
-    }
-
-    // 2. Tentukan Tipe Shader
-    glslopt_shader_type type = is_vertex ? kGlslOptShaderVertex : kGlslOptShaderFragment;
-
-    // 3. Lakukan Optimasi
-    glslopt_shader* shader = glslopt_optimize(ctx, type, source, 0);
-
-    char* optimizedCode = NULL;
-    if(glslopt_get_status(shader)) {
-        // Berhasil!
-        const char* rawOutput = glslopt_get_output(shader);
-        if(rawOutput) {
-            // Kita duplikasi stringnya karena rawOutput milik ctx
-            optimizedCode = strdup(rawOutput);
-            // printf("LIBGL: Shader Optimized! Size: %d -> %d\n", strlen(source), strlen(optimizedCode));
-        }
-    } else {
-        // Gagal (Syntax error atau unsupported feature)
-        // printf("LIBGL: Optimization Failed: %s\n", glslopt_get_log(shader));
-    }
-
-    // 4. Bersihkan
-    glslopt_shader_delete(shader);
-    glslopt_cleanup(ctx);
-
-    // 5. Return hasil baru (atau NULL jika gagal)
-    return optimizedCode;
-}
 
 char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t *need)
 {
@@ -1307,20 +1268,7 @@ char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t *need)
     free(versionString);
   if(pEntry!=pBuffer)
     free(pBuffer);
-
-  // =========================================================
-  // [INJEKSI] CALL OPTIMIZER BEFORE RETURN
-  // =========================================================
-  char* FinalOptimized = OptimizeShader(Tmp, isVertex);
-  
-  if (FinalOptimized) {
-      // Jika optimasi sukses, buang kode lama (Tmp) dan pakai yang baru
-      free(Tmp);
-      return FinalOptimized;
-  }
-  // =========================================================
-
-  return Tmp; // Jika gagal, pakai yang original
+  return Tmp;
 }
 
 int isBuiltinAttrib(const char* name) {

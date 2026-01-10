@@ -72,17 +72,6 @@ SET(GL_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/gl/math/matheval.c
 )
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/optimizer)
-
-add_definitions(-D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS)
-
-file(GLOB_RECURSE OPTIMIZER_SRC
-    "${CMAKE_CURRENT_SOURCE_DIR}/optimizer/*.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/optimizer/*.cpp"
-)
-
-list(APPEND GL_SRC ${OPTIMIZER_SRC})
-
 SET(GL_H
     ${CMAKE_CURRENT_SOURCE_DIR}/../version.h
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbconverter.h
