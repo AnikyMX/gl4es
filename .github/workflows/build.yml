@@ -42,7 +42,7 @@ jobs:
           -DANDROID=ON \
           -DNO_GBM=ON \
           -G "Unix Makefiles" \
-          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -ftree-vectorize -ffast-math -fsingle-precision-constant -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fprefetch-loop-arrays -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math -fvectorize"
+          -DCMAKE_C_FLAGS="-Ofast -mcpu=cortex-a53 -mtune=cortex-a53 -ftree-vectorize -ffast-math -fvisibility=hidden -funroll-loops -fno-strict-aliasing -fomit-frame-pointer -fslp-vectorize -fno-stack-protector -flto -fno-math-errno -fno-trapping-math -fvectorize"
         make -j$(nproc)
 
     - name: Inject Library & Create APK
