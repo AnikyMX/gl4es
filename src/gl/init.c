@@ -33,11 +33,26 @@ void fpe_shader_reset_internals();
 
 globals4es_t globals4es = {0};
 
-#ifdef DEFAULT_ES
-#undef DEFAULT_ES
+#if defined(PANDORA) || defined(CHIP) || (defined(GOA_CLONE) && !defined(__aarch64__))
+static void fast_math() {
+  // enable Cortex A8 RunFast
+   int v = 0;
+   __asm__ __volatile__ (
+     "vmrs %0, fpscr\n"
+     "orr  %0, #((1<<25)|(1<<24))\n" // default NaN, flush-to-zero
+     "vmsr fpscr, %0\n"
+     //"vmrs %0, fpscr\n"
+     : "=&r"(v));
+}
 #endif
 
-#define DEFAULT_ES 3
+#ifndef DEFAULT_ES
+#if defined(PANDORA) || defined(ANDROID)
+#define DEFAULT_ES 1
+#else
+#define DEFAULT_ES 2
+#endif
+#endif
 
 void load_libs();
 void glx_init();
@@ -81,7 +96,11 @@ void initialize_gl4es() {
     globals4es.mergelist = 1;
     globals4es.queries = 1;
     globals4es.beginend = 1;
+    #ifdef PYRA
+    GetEnvVarInt("LIBGL_DEEPBIND", &globals4es.deepbind, 0);
+    #else
     GetEnvVarInt("LIBGL_DEEPBIND", &globals4es.deepbind, 1);
+    #endif
     // overrides by env. variables
         #ifdef GL4ES_COMPILE_FOR_USE_IN_SHARED_LIB
             GetEnvVarInt("LIBGL_NOBANNER",&globals4es.nobanner,1);
@@ -140,7 +159,14 @@ void initialize_gl4es() {
     }
     env(LIBGL_BLITFB0, globals4es.blitfb0, "Blit to FB 0 force a SwapBuffer");
     env(LIBGL_FPS, globals4es.showfps, "fps counter enabled");
-    env(LIBGL_VSYNC, globals4es.vsync, "vsync enabled");    
+#if defined(USE_FBIO) || defined(PYRA)
+    env(LIBGL_VSYNC, globals4es.vsync, "vsync enabled");
+#endif
+#ifdef PANDORA
+        if(GetEnvVarFloat("LIBGL_GAMMA",&globals4es.gamma,0.0f)) {
+      SHUT_LOGD("Set gamma to %.2f\n", globals4es.gamma);
+        }
+#endif
     env(LIBGL_NOBGRA, globals4es.nobgra, "Ignore BGRA texture capability");
     env(LIBGL_NOTEXRECT, globals4es.notexrect, "Don't export Text Rectangle extension");
     if(globals4es.usefbo) {
@@ -488,7 +514,11 @@ void initialize_gl4es() {
         }
     }
 
-    globals4es.maxbatch = 0;
+        #if defined(GL4ES_COMPILE_FOR_USE_IN_SHARED_LIB) && defined(AMIGAOS4) // temporary workaround for not-working envs
+           globals4es.maxbatch = 40;
+        #else
+           globals4es.maxbatch = 0;
+       #endif
     globals4es.minbatch = 0;
     int tmp = 0, tmp2 = 0;
     switch(GetEnvVarFmt("LIBGL_BATCH","%d-%d",&tmp,&tmp2)) {
@@ -676,6 +706,11 @@ void initialize_gl4es() {
             if(strlen(cwd))
               if(cwd[strlen(cwd)]!='/')
                   strcat(cwd, "/");
+#elif defined AMIGAOS4
+            if(custom_psa)
+              strcpy(cwd, custom_psa);
+            else
+              strcpy(cwd, "PROGDIR:");
 #endif
             if(strlen(cwd)) {
                 strcat(cwd, ".gl4es.psa");

@@ -85,6 +85,9 @@ void BuildExtensionsList() {
         char *extensions = (char *) glstate->extensions;
 		strcpy(extensions,
 				"GL_EXT_abgr "
+                #ifdef AMIGAOS4
+                "GL_MGL_packed_pixels " // same as GL_EXT_packed_pixels, but older, some old Amiga games may check for this
+                #endif
                 "GL_EXT_packed_pixels "
                 "GL_EXT_compiled_vertex_array "
                 "GL_EXT_compiled_vertex_arrays " // yes, at least on AmigaOS there are progs which check for this wrong string; reason is an old typo in the MiniGL driver.
@@ -1135,7 +1138,7 @@ void APIENTRY_GL4ES gl4es_glGetClipPlanef(GLenum plane, GLfloat * equation)
         errorShim(GL_INVALID_ENUM);
         return;
     }
-    LOAD_GLES3(glGetClipPlanef);
+    LOAD_GLES2(glGetClipPlanef);
     if(gles_glGetClipPlanef)
     {
         errorGL();

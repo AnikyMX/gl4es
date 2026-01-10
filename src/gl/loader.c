@@ -12,8 +12,19 @@ void *open_lib(const char **names, const char *override) {
 void load_libs() {
 }
 
-#else
+#elif defined AMIGAOS4
+#include "../agl/amigaos.h"
+void *gles;
+void load_libs() {
+    os4OpenLib(&gles);
+}
 
+void *open_lib(const char **names, const char *override) {
+    return (void*)(~(uintptr_t)0);
+}
+
+
+#else
 #ifndef _WIN32
 // PATH_MAX
 #ifdef __linux__
@@ -21,8 +32,10 @@ void load_libs() {
 #else
 #include <limits.h>
 #endif
+#else
+__declspec(dllimport)
+struct HINSTANCE__* __stdcall LoadLibraryW(const wchar_t*);
 #endif
-
 #include "logs.h"
 #include "init.h"
 #include "envvars.h"
@@ -67,19 +80,30 @@ static const char *lib_ext[] = {
     NULL,
 };
 
-static const char *gles3_lib[] = {
-    "libGLESv3_CM",
-    "libGLESv3",
+static const char *gles2_lib[] = {
+    #if defined(BCMHOST)
+    "libbrcmGLESv2",
+    #endif
+    "libGLESv2_CM",
+    "libGLESv2",
     NULL
 };
 
 static const char *gles_lib[] = {
+    #if defined(BCMHOST)
+    "libbrcmGLESv1_CM",
+    #endif
+    #if !defined(PYRA)
     "libGLESv1_CM",
+    #endif
     "libGLES_CM",
     NULL
 };
 
 static const char *egl_lib[] = {
+    #if defined(BCMHOST)
+    "libbrcmEGL",
+    #endif
     "libEGL",
     NULL
 };
@@ -140,8 +164,17 @@ void load_libs() {
     const char *gles_override = GetEnvVar("LIBGL_GLES");
     if (!gles_override) {
         gles_override = DEFAULT_GLES;
+#if defined(BCMHOST) && !defined(ANDROID)
+        // optimistically try to load the raspberry pi libs
+        if (! gles_override) {
+            const char *bcm_host_name[] = {"libbcm_host", NULL};
+            const char *vcos_name[] = {"libvcos", NULL};
+            bcm_host = open_lib(bcm_host_name, NULL);
+            vcos = open_lib(vcos_name, NULL);
+        }
+#endif
     }
-    gles = open_lib((globals4es.es==1)?gles_lib:gles3_lib, gles_override);
+    gles = open_lib((globals4es.es==1)?gles_lib:gles2_lib, gles_override);
 #else
     gles = open_lib(L"LIBGL_GLES", L"libGLESv2.dll");
 #endif
@@ -175,8 +208,16 @@ void* (APIENTRY_GL4ES *gles_getProcAddress)(const char *name);
 void* APIENTRY_GL4ES proc_address(void *lib, const char *name) {
     if (gles_getProcAddress)
         return gles_getProcAddress(name);
-
-#if !defined NO_LOADER
+#ifdef AMIGAOS4
+    return os4GetProcAddress(name);
+#elif defined __EMSCRIPTEN__
+    void *emscripten_GetProcAddress(const char *name);
+    return emscripten_GetProcAddress(name);
+#elif defined __APPLE__
+    // apple code seems to use RTLD_NEXT which is usually ((void*)-1)
+    // remove if it not needed
+    return dlsym((void*)(~(uintptr_t)0), name);
+#elif !defined NO_LOADER
     return dlsym(lib, name);
 #else
     return NULL;

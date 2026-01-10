@@ -19,7 +19,7 @@ void init_matrix(glstate_t* glstate);
 
 static void free_renderbuffer(glrenderbuffer_t *rend)
 {
-    LOAD_GLES3_OR_OES(glDeleteRenderbuffers);
+    LOAD_GLES2_OR_OES(glDeleteRenderbuffers);
     if(!rend || !gles_glDeleteRenderbuffers)
         return;
     if(rend->secondarybuffer)
@@ -32,7 +32,7 @@ static void free_renderbuffer(glrenderbuffer_t *rend)
 
 static void free_framebuffer(glframebuffer_t *fb)
 {
-    LOAD_GLES3_OR_OES(glDeleteFramebuffers);
+    LOAD_GLES2_OR_OES(glDeleteFramebuffers);
     if(!fb || !gles_glDeleteFramebuffers)
         return;
     if(fb->id)
@@ -63,6 +63,11 @@ void CopyGLEShard(void* dst, const void* src)
 
 void* NewGLState(void* shared_glstate, int es2only) {
     glstate_t *glstate = (shared_glstate!=DEFAULT_STATE)?((glstate_t*)calloc(1, sizeof(glstate_t))):&default_glstate;
+#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)
+    int def = 0;
+    if(shared_glstate==DEFAULT_STATE)
+        def = 1;
+#endif
     if(shared_glstate==DEFAULT_STATE)
         shared_glstate=NULL;
     if(shared_glstate) {
@@ -379,10 +384,15 @@ void* NewGLState(void* shared_glstate, int es2only) {
     }
 
     // Grab ViewPort & Scissor
+#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)
+    if(!def) {// if it's default_glstate, then there is probably no glcontext...
+#endif
     LOAD_GLES(glGetIntegerv);
     gles_glGetIntegerv(GL_VIEWPORT, (GLint*)&glstate->raster.viewport);
     gles_glGetIntegerv(GL_SCISSOR_BOX, (GLint*)&glstate->raster.scissor);
-
+#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)
+    }
+#endif
     // FBO
     glstate->fbowidth  = glstate->fbo.mainfbo_width  = glstate->raster.viewport.width;
     glstate->fboheight = glstate->fbo.mainfbo_height = glstate->raster.viewport.height;
@@ -549,7 +559,7 @@ void DeleteGLState(void* oldstate) {
     }
     // oldfbos
     if(!state->shared_cnt && state->fbo.old) {
-        LOAD_GLES3_OR_OES(glDeleteFramebuffers);
+        LOAD_GLES2_OR_OES(glDeleteFramebuffers);
         gles_glDeleteFramebuffers(state->fbo.old->nbr, state->fbo.old->fbos);
         free(state->fbo.old->fbos);
         free(state->fbo.old);
@@ -597,6 +607,9 @@ void ActivateGLState(void* new_glstate) {
     glstate_t *newstate = (new_glstate)?(glstate_t*)new_glstate:&default_glstate;
     if(glstate == newstate) return;  // same state, nothing to do
     // check if viewport is correct
+#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)
+    if(glstate || newstate!=&default_glstate) // avoid getting gles info with no context
+#endif
     if(new_glstate && (newstate->raster.viewport.width==0 || newstate->raster.viewport.height==0)) {
         LOAD_GLES(glGetIntegerv);
         gles_glGetIntegerv(GL_VIEWPORT, (GLint*)&newstate->raster.viewport);

@@ -20,11 +20,11 @@ hardext_t hardext = {0};
 
 static int testGLSL(const char* version, int uniformLoc) {
     // check if glsl 120 shaders are supported... by compiling one !
-    LOAD_GLES3(glCreateShader);
-    LOAD_GLES3(glShaderSource);
-    LOAD_GLES3(glCompileShader);
-    LOAD_GLES3(glGetShaderiv);
-    LOAD_GLES3(glDeleteShader);
+    LOAD_GLES2(glCreateShader);
+    LOAD_GLES2(glShaderSource);
+    LOAD_GLES2(glCompileShader);
+    LOAD_GLES2(glGetShaderiv);
+    LOAD_GLES2(glDeleteShader);
     LOAD_GLES(glGetError);
 
     GLuint shad = gles_glCreateShader(GL_VERTEX_SHADER);
@@ -44,7 +44,7 @@ static int testGLSL(const char* version, int uniformLoc) {
     gles_glGetShaderiv(shad, GL_COMPILE_STATUS, &compiled);
     /*
     if(!compiled) {
-        LOAD_GLES3(glGetShaderInfoLog)
+        LOAD_GLES2(glGetShaderInfoLog)
         char buff[500];
         gles_glGetShaderInfoLog(shad, 500, NULL, buff);
         printf("LIBGL: \"%s\" failed, message:\n%s\n", version, buff);
@@ -57,11 +57,11 @@ static int testGLSL(const char* version, int uniformLoc) {
 }
 
 static int testTextureCubeLod() {
-    LOAD_GLES3(glCreateShader);
-    LOAD_GLES3(glShaderSource);
-    LOAD_GLES3(glCompileShader);
-    LOAD_GLES3(glGetShaderiv);
-    LOAD_GLES3(glDeleteShader);
+    LOAD_GLES2(glCreateShader);
+    LOAD_GLES2(glShaderSource);
+    LOAD_GLES2(glCompileShader);
+    LOAD_GLES2(glGetShaderiv);
+    LOAD_GLES2(glDeleteShader);
     LOAD_GLES(glGetError);
 
     GLuint shad = gles_glCreateShader(GL_FRAGMENT_SHADER);
@@ -99,13 +99,19 @@ void GetHardwareExtensions(int notest)
     hardext.esversion = globals4es.es;
     if(notest) 
     {
+#ifndef AMIGAOS4
         SHUT_LOGD("Hardware test disabled, nothing activated...\n");
+#endif
         if(hardext.esversion==2) {
             hardext.maxteximage = 4;
             hardext.maxvarying = 8;
             hardext.maxtex = 8;
             hardext.maxvattrib = 16;
+#ifdef AMIGAOS4
+            hardext.npot = 3;
+#else
             hardext.npot = 1;
+#endif
             hardext.fbo = 1; 
             hardext.blendcolor = 1;
             hardext.blendsub = 1;
@@ -116,9 +122,15 @@ void GetHardwareExtensions(int notest)
             hardext.pointsize = 1;
             hardext.cubemap = 1;
             hardext.maxdrawbuffers = 1;
+#ifdef AMIGAOS4
+            hardext.glsl300es = 1;
+#endif
         }
         return;
     }
+#if defined(BCMHOST) && !defined(ANDROID)
+    rpi_init();
+#endif
 #ifdef NOEGL
     SHUT_LOGD("Hardware test on current Context...\n");
 #else
@@ -139,15 +151,11 @@ void GetHardwareExtensions(int notest)
     EGLSurface eglSurface;
     EGLContext eglContext;
 
-    char* es_ver_string = "2.0";
-    if (hardext.esversion == 1) es_ver_string = "1.1";
-    else if (hardext.esversion == 3) es_ver_string = "3.0";
-    
-    SHUT_LOGD("Using GLES %s backend\n", es_ver_string);
+    SHUT_LOGD("Using GLES %s backend\n", (hardext.esversion==1)?"1.1":"2.0");
 
     // Create a PBuffer first...
-    EGLint egl_context_attrib_es3[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 3,
+    EGLint egl_context_attrib_es2[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE
     };
 
@@ -165,10 +173,18 @@ void GetHardwareExtensions(int notest)
     egl_attribs[i++] = EGL_NONE;
 
     EGLint configAttribs[] = {
+#ifdef PANDORA
+    // on the Pandora, there don't seem to exist a 8888 PBuffer config for GLES2.
+        EGL_RED_SIZE, (hardext.esversion==1)?8:5,
+        EGL_GREEN_SIZE, (hardext.esversion==1)?8:6,
+        EGL_BLUE_SIZE, (hardext.esversion==1)?8:5,
+        EGL_ALPHA_SIZE, (hardext.esversion==1)?8:0,
+#else
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, 8,
+#endif
         EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
         EGL_RENDERABLE_TYPE, (hardext.esversion==1)?EGL_OPENGL_ES_BIT:EGL_OPENGL_ES2_BIT,
         EGL_NONE
@@ -201,6 +217,7 @@ void GetHardwareExtensions(int notest)
         hardext.gbm = 1;
     }
 #endif
+#ifndef PANDORA
     if(!configsFound) {
         // try without alpha channel
         configAttribs[4*2-1] = 0;
@@ -210,12 +227,14 @@ void GetHardwareExtensions(int notest)
             hardext.eglnoalpha = 1;
         }
     }
+#endif
     if(!configsFound) {
         SHUT_LOGE("Error while gathering supported extension (eglChooseConfig: %s), default to none\n", PrintEGLError(0));
         egl_eglTerminate(eglDisplay);
         return;
     }
-    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, (hardext.esversion==1) ? egl_context_attrib : egl_context_attrib_es3);    if(!eglContext) {
+    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, (hardext.esversion==1)?egl_context_attrib:egl_context_attrib_es2);
+    if(!eglContext) {
         SHUT_LOGE("Error while gathering supported extension (eglCreateContext: %s), default to none\n", PrintEGLError(0));
         return;
     }
@@ -318,7 +337,7 @@ void GetHardwareExtensions(int notest)
             S("GL_OES_fragment_precision_high ", highp, 1);
             if(!hardext.highp) {
                 // check if highp is supported anyway
-                LOAD_GLES3(glGetShaderPrecisionFormat);
+                LOAD_GLES2(glGetShaderPrecisionFormat);
                 if(gles_glGetShaderPrecisionFormat) {
                     GLint range[2] = {0};
                     GLint precision=0;

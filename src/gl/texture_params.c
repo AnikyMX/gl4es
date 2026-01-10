@@ -322,7 +322,7 @@ void APIENTRY_GL4ES gl4es_glTexParameterfv(GLenum target, GLenum pname, const GL
                         // force regeneration, if possible
                         FLUSH_BEGINEND;
                         realize_bound(glstate->texture.active, target);
-                        LOAD_GLES3_OR_OES(glGenerateMipmap);
+                        LOAD_GLES2_OR_OES(glGenerateMipmap);
                         gl4es_glGenerateMipmap(rtarget);
                     }*/
                     return;
@@ -932,7 +932,7 @@ void realize_textures(int drawing) {
             if(tex->mipmap_need && !tex->mipmap_done) {
                 if(!tex->mipmap_auto) {
                     // should check if glGenerateMipmap exist, and fall back to no mipmap if not
-                    LOAD_GLES3_OR_OES(glGenerateMipmap);
+                    LOAD_GLES2_OR_OES(glGenerateMipmap);
                     gles_glGenerateMipmap(GL_TEXTURE_2D);
                 }
                 tex->mipmap_done = 1;

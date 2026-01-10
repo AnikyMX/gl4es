@@ -11,17 +11,27 @@
 #endif // USE_FBIO
 #include <signal.h>
 #include <sys/ioctl.h>
-#if defined(USE_CLOCK)
+#if defined(USE_CLOCK) || defined(PYRA)
 #include <time.h>
 #else
 #include <sys/time.h>
 #endif
+#ifdef PANDORA
+#include <sys/socket.h>
+#include <sys/un.h>
+#endif // PANDORA
 #include <unistd.h>
 
+#ifdef AMIGAOS4
+#include "../agl/amigaos.h"
+#endif // AMIGAOS4
 #include "../gl/debug.h"
 #include "../gl/framebuffers.h"
 #include "../gl/init.h"
 #include "../gl/loader.h"
+#ifdef PANDORA
+#include "../gl/pixel.h"
+#endif
 #include "glx_gbm.h"
 #include "hardext.h"
 #include "streaming.h"
@@ -52,6 +62,10 @@ static int maxEGLConfig = 0;
 static GLXFBConfig allFBConfig = NULL;
 #endif
 static int glx_default_depth=0;
+#ifdef PANDORA
+static struct sockaddr_un sun;
+static int sock = -2;
+#endif
 
 int8_t CheckEGLErrors() {
 #ifndef NOEGL
@@ -267,6 +281,23 @@ static int get_config_default(Display *display, int attribute, int *value) {
         case GLX_AUX_BUFFERS:
             *value = 0;
             break;
+#ifdef PANDORA
+        case GLX_RED_SIZE:
+            *value = 5;
+            break;
+        case GLX_GREEN_SIZE:
+            *value = 6;
+            break;
+        case GLX_BLUE_SIZE:
+            *value = 5;
+            break;
+        case GLX_ALPHA_SIZE:
+            *value = 8; // why not 0?
+            break;
+        case GLX_DEPTH_SIZE:
+            *value = 16;
+            break;
+#else
         case GLX_RED_SIZE:
             *value = 8;
             break;
@@ -282,6 +313,7 @@ static int get_config_default(Display *display, int attribute, int *value) {
         case GLX_DEPTH_SIZE:
             *value = 24;//32;
             break;
+#endif
         case GLX_STENCIL_SIZE:
             *value = 8;
             break;
@@ -475,10 +507,33 @@ static void xrefresh() {
     int dummy = system("xrefresh");
 }
 
+#ifdef PANDORA
+static void pandora_reset_gamma() {
+    if(globals4es.gamma>0.0f)
+        system("sudo /usr/pandora/scripts/op_gamma.sh 0");
+}
+void pandora_set_gamma() {
+     {
+        char buf[50];
+        if(globals4es.gamma>0.0f)
+            sprintf(buf, "sudo /usr/pandora/scripts/op_gamma.sh %.2f", globals4es.gamma);
+        else
+            sprintf(buf, "sudo /usr/pandora/scripts/op_gamma.sh 0");
+        int dummy = system(buf);
+    }
+}
+#endif
+
 static void signal_handler(int sig) {
     if (globals4es.xrefresh)
         xrefresh();
+#ifdef PANDORA
+    pandora_reset_gamma();
+#endif
 
+#if defined(BCMHOST) && !defined(ANDROID)
+    rpi_fini();
+#endif
 #ifdef HAS_BACKTRACE
     if (globals4es.stacktrace) {
         switch (sig) {
@@ -502,6 +557,29 @@ static void signal_handler(int sig) {
     signal(sig, SIG_DFL);
     raise(sig);
 }
+#ifdef PANDORA
+static void init_liveinfo() {
+    static const char socket_name[] = "\0liveinfo";
+    sock = socket(PF_UNIX, SOCK_DGRAM, 0);
+    if (sock == -1) {
+        // no socket, so LiveInfo probably not active
+        return;
+    }
+
+    memset(&sun, 0, sizeof(sun));
+    sun.sun_family = AF_UNIX;
+    memcpy(sun.sun_path, socket_name, sizeof(socket_name));
+    // send a test string
+    const char test_string[] = "gl: fpsinfo";
+    if (sendto(sock, test_string, strlen(test_string), 0,(struct sockaddr *)&sun, sizeof(sun))<0) {
+        // error, so probably not present
+        close(sock);
+        sock=-1;
+    } else
+        fcntl(sock, F_SETFL, O_NONBLOCK);
+}
+
+#endif
 
 void glx_init() {
     // init map_drawable
@@ -511,6 +589,9 @@ void glx_init() {
     MapDrawable = kh_init(mapdrawable);
     kh_put(mapdrawable, MapDrawable, 1, &ret);
     kh_del(mapdrawable, MapDrawable, 1);
+#if defined(BCMHOST) && !defined(ANDROID)
+    rpi_init();
+#endif
     if(globals4es.usegbm)
         atexit(CloseGBMFunctions);
     if (globals4es.xrefresh || globals4es.stacktrace) 
@@ -527,10 +608,28 @@ void glx_init() {
         }
         if (globals4es.xrefresh)
             atexit(xrefresh);
-
+#if !defined(ANDROID) && !defined(AMIGAOS4)
+#endif //!ANDROID && !AMIGAOS4
+    }
+#ifdef PANDORA
+    atexit(pandora_reset_gamma);
+#elif defined(BCMHOST)
+    atexit(bcm_host_deinit);
+#elif defined(AMIGAOS4)
+		#ifndef GL4ES_COMPILE_FOR_USE_IN_SHARED_LIB
+    	atexit(os4CloseLib);
+    #endif
+#endif
     //V-Sync
     if (globals4es.vsync)
         init_vsync();
+#ifdef PANDORA
+
+    init_liveinfo();
+    if (sock>-1) {
+        SHUT_LOGD("LiveInfo detected, fps will be shown\n");
+    }
+#endif
 }
 
 #ifndef NOX11
@@ -590,7 +689,11 @@ GLXContext gl4es_glXCreateContext(Display *display,
         default_glxfbconfig.greenBits = (visual==0)?0:(visual->depth==16)?6:8;
         default_glxfbconfig.blueBits = (visual==0)?0:(visual->depth==16)?5:8;
         default_glxfbconfig.alphaBits = (visual==0)?0:(visual->depth!=32)?0:8;
+        #ifdef PANDORA
+        default_glxfbconfig.depthBits = 16;
+        #else
         default_glxfbconfig.depthBits = 24;
+        #endif
         default_glxfbconfig.stencilBits = 8;
         default_glxfbconfig.doubleBufferMode = 1;
     }
@@ -599,13 +702,27 @@ GLXContext gl4es_glXCreateContext(Display *display,
         glxfbconfig->stencilBits = 8;
     if(depthBits==16 && glxfbconfig->stencilBits)
         glxfbconfig->stencilBits = EGL_DONT_CARE;
+#ifdef PANDORA
+    if(depthBits==32)
+        depthBits = (glxfbconfig->stencilBits==8 && hardext.esversion==2)?24:16;
+    if(depthBits==24 && glxfbconfig->stencilBits==8 && !(globals4es.usefbo || globals4es.usepbuffer || hardext.esversion==2))
+        depthBits = 16;
+    else if(depthBits==16 && glxfbconfig->stencilBits==8 && hardext.esversion==2)
+        depthBits = 24;
+#endif    
 
     DBG(printf("Creating R:%d G:%d B:%d A:%d visual deth=%d Depth:%d Stencil:%d Multisample:%d/%d Doublebuff=%d\n", glxfbconfig->redBits, glxfbconfig->greenBits, glxfbconfig->blueBits, glxfbconfig->alphaBits, visual?visual->depth:0, depthBits, glxfbconfig->stencilBits, glxfbconfig->nMultiSampleBuffers, glxfbconfig->multiSampleSize, glxfbconfig->doubleBufferMode);)
     EGLint configAttribs[] = {
+#ifdef PANDORA
+        EGL_RED_SIZE, 5,
+        EGL_GREEN_SIZE, 6,
+        EGL_BLUE_SIZE, 5,
+#else
         EGL_RED_SIZE, glxfbconfig->redBits,
         EGL_GREEN_SIZE, glxfbconfig->greenBits,
         EGL_BLUE_SIZE, glxfbconfig->blueBits,
         EGL_ALPHA_SIZE, (hardext.eglnoalpha)?0:glxfbconfig->alphaBits,
+#endif
         EGL_DEPTH_SIZE, depthBits,
         EGL_RENDERABLE_TYPE, (hardext.esversion==1)?EGL_OPENGL_ES_BIT:EGL_OPENGL_ES2_BIT,
         //EGL_BUFFER_SIZE, depthBits,
@@ -676,10 +793,14 @@ GLXContext gl4es_glXCreateContext(Display *display,
     fake->xid = 1;  //TODO: Proper handling of that id...
     fake->contextType = 0;  //Window
     fake->doublebuff = glxfbconfig->doubleBufferMode;
+#ifdef PANDORA
+    fake->rbits = 5; fake->gbits=6; fake->bbits=5; fake->abits=0;
+#else
     fake->rbits = (visual==0)?8:(visual->depth==16)?5:8,
     fake->gbits= (visual==0)?8:(visual->depth==16)?6:8,
     fake->bbits= (visual==0)?8:(visual->depth==16)?5:8,
     fake->abits= (visual==0)?8:(visual->depth!=32)?0:8,
+#endif
     fake->samples = 0; fake->samplebuffers = 0;
     fake->shared = (shareList)?shareList->glstate:NULL;
 
@@ -773,12 +894,21 @@ GLXContext gl4es_glXCreateContextAttribsARB(Display *display, GLXFBConfig config
         if(config->drawableType&GLX_WINDOW_BIT) type|=EGL_WINDOW_BIT;
         if(config->drawableType&GLX_PBUFFER_BIT) type|=EGL_PBUFFER_BIT;
         EGLint configAttribs[] = {
+#ifdef PANDORA
+            EGL_RED_SIZE, (config->drawableType==GLX_PIXMAP_BIT)?config->redBits:5,
+            EGL_GREEN_SIZE, (config->drawableType==GLX_PIXMAP_BIT)?config->greenBits:6,
+            EGL_BLUE_SIZE, (config->drawableType==GLX_PIXMAP_BIT)?config->blueBits:5,
+            EGL_ALPHA_SIZE, (config->drawableType==GLX_PIXMAP_BIT)?config->alphaBits:0,
+            EGL_DEPTH_SIZE, (globals4es.usefb)?24:config->depthBits,
+            EGL_STENCIL_SIZE, (globals4es.usefb)?8:config->stencilBits,
+#else
             EGL_RED_SIZE, config->redBits,
             EGL_GREEN_SIZE, config->greenBits,
             EGL_BLUE_SIZE, config->blueBits,
             EGL_ALPHA_SIZE, (hardext.eglnoalpha)?0:config->alphaBits,
             EGL_DEPTH_SIZE, config->depthBits,
             EGL_STENCIL_SIZE, config->stencilBits,
+#endif
             EGL_SAMPLES, config->multiSampleSize,
             EGL_SAMPLE_BUFFERS, config->nMultiSampleBuffers,
             EGL_RENDERABLE_TYPE, (hardext.esversion==1)?EGL_OPENGL_ES_BIT:EGL_OPENGL_ES2_BIT,
@@ -1008,6 +1138,13 @@ XVisualInfo *gl4es_glXChooseVisual(Display *display,
     glx_default_depth = XDefaultDepth(display, screen);
     if (glx_default_depth != 16 && glx_default_depth != 24  && glx_default_depth != 32)
         LOGD("unusual desktop color depth %d\n", glx_default_depth);
+
+#ifndef PANDORA
+    // PANDORA only has 16bits X11, lets ignore 32bits requests
+/*    if(ask_depth>glx_default_depth)
+        glx_default_depth = ask_depth;  // higher depth...
+*/  // this makes window of TokiTory transparent...
+#endif
 
     XVisualInfo xvinfo = {0};
     xvinfo.depth = glx_default_depth;
@@ -1322,6 +1459,9 @@ Bool gl4es_glXMakeCurrent(Display *display,
         context->drawable = drawable;
 
         ActivateGLState(context->glstate);
+#ifdef PANDORA
+        if(!created) pandora_set_gamma();
+#endif
 
         CheckEGLErrors();
         if (result) {
@@ -1442,7 +1582,11 @@ void gl4es_glXSwapBuffers(Display *display,
     } else
         egl_eglSwapBuffers(eglDisplay, surface);
     //CheckEGLErrors();     // not sure it's a good thing to call a eglGetError() after all eglSwapBuffers, performance wize (plus result is discarded anyway)
+#ifdef PANDORA
+    if (globals4es.showfps || (sock>-1))
+#else
     if (globals4es.showfps) 
+#endif
     {
         // framerate counter
         static float avg, fps = 0;
@@ -1474,6 +1618,13 @@ void gl4es_glXSwapBuffers(Display *display,
 
                 avg = frame / (float)(now - frame1);
                 if (globals4es.showfps) LOGD("fps: %.2f, avg: %.2f\n", fps, avg);
+#ifdef PANDORA
+                if (sock>-1) {
+                    char tmp[60];
+                    snprintf(tmp, 60, "gl:  %2.2f", fps);
+                    sendto(sock, tmp, strlen(tmp), 0,(struct sockaddr *)&sun, sizeof(sun));                    
+                }
+#endif
             }
         }
         last_frame = now;
@@ -1735,6 +1886,18 @@ GLXFBConfig *gl4es_glXChooseFBConfig(Display *display, int screen,
                 attr[cr] = attr[cg] = attr[cb] = 5;
                 egl_eglChooseConfig(eglDisplay, attr, NULL, 0, count);
         }
+#ifdef PANDORA
+        if((*count==0) && (!globals4es.usepbuffer) && (attr[cr]>5 || attr[cg]>5 || attr[cb]>5)) {
+                DBG(printf("glXChooseFBConfig found 0 config with 8bits rgb, trying lowering bitness\n");)
+                attr[cr] = attr[cg] = attr[cb] = 5;
+                egl_eglChooseConfig(eglDisplay, attr, NULL, 0, count);
+        }
+#endif
+        /*if((*count==0) && (vt) && (attr[vt]!=-1)) {
+            DBG(printf("glXChooseFBConfig found 0 config with VisualType, trying without\n");)
+            attr[vt] = -1;  //EGL_DONT_CARE
+            egl_eglChooseConfig(eglDisplay, attr, NULL, 0, count);
+        }*/
         if(*count==0) {  // NO Config found....
             DBG(printf("glXChooseFBConfig found 0 config\n");)
             return NULL;
@@ -2533,6 +2696,24 @@ void actualBlit(int reverse, int Width, int Height, int Depth,
                     Display *dpy, Pixmap drawable, GC gc, XImage* frame,
                     uintptr_t pix, void* tmp) {
 const int sbuf = Width * Height * (Depth==16?2:4);
+#ifdef PANDORA
+    if (tmp) {
+        if(reverse) {
+            int stride = Width * 2;
+            uintptr_t src_pos = (uintptr_t)tmp;
+            uintptr_t dst_pos = (uintptr_t)pix+sbuf-stride;
+            for (int i = 0; i < Height; i++) {
+                for (int j = 0; j < Width; j++) {
+                    *(GLushort*)dst_pos = ((GLushort)(((char*)src_pos)[0]&0xf8)>>(3)) | ((GLushort)(((char*)src_pos)[1]&0xfc)<<(5-2)) | ((GLushort)(((char*)src_pos)[2]&0xf8)<<(11-3));
+                    src_pos += 4;
+                    dst_pos += 2;
+                }
+                dst_pos -= 2*stride;
+            }
+        } else
+            pixel_convert(tmp, (void**)&pix, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 0, glstate->texture.unpack_align);
+    } else
+#endif
         if(reverse) {
             int stride = Width * (Depth==16?2:4);
             uintptr_t end=(uintptr_t)pix+sbuf-stride;
@@ -2628,6 +2809,11 @@ void BlitEmulatedPixmap(int win) {
     // create things if needed
     if(!buff->frame) {
         int sz = Width*(Height+reverse)*(Depth==16?2:4);
+#ifdef PANDORA
+        if(hardext.esversion==1 && Depth==16) {
+            sz += Width*Height*4;
+        }
+#endif
         frame = buff->frame = XCreateImage(dpy, NULL /*visual*/, Depth, ZPixmap, 0, malloc(sz), Width, Height, (Depth==16)?16:32, 0);
     }
 
@@ -2648,6 +2834,20 @@ void BlitEmulatedPixmap(int win) {
 
     // grab framebuffer
     void* tmp = NULL;
+#ifdef PANDORA
+    LOAD_GLES(glReadPixels);
+    if(hardext.esversion==1) {
+        if(Depth==16) {
+            tmp = (void*)(pix + Width*Height*2);
+            gles_glReadPixels(0, 0, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, tmp);
+        } else {
+            gles_glReadPixels(0, 0, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, (void*)pix);
+        }
+    } else 
+    if(Depth==16)
+        gles_glReadPixels(0, 0, Width, Height, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, (void*)pix);
+    else
+#endif
     gl4es_glReadPixels(0, 0, Width, Height, (Depth==16)?GL_RGB:GL_BGRA, (Depth==16)?GL_UNSIGNED_SHORT_5_6_5:GL_UNSIGNED_BYTE, (void*)pix);
 
     actualBlit(reverse, Width, Height, Depth, dpy, drawable, gc, frame, pix, tmp);

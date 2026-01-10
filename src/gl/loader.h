@@ -199,7 +199,7 @@ EXPORT extern void *egl;
 #define LOAD_LIB_ALT(lib, alt, name) DEFINE_RAW(lib, name); LOAD_RAW_ALT(lib, alt, name, proc_address(lib, #name))
 
 #define LOAD_GLES(name)         LOAD_LIB(gles, name)
-#define LOAD_GLES3(name)        LOAD_LIB_SILENT(gles, name)
+#define LOAD_GLES2(name)        LOAD_LIB_SILENT(gles, name)
 #define LOAD_GLES_OR_FPE(name)  LOAD_LIB_ALT(gles, fpe, name)
 
 #define LOAD_GLES_FPE(name) \
@@ -213,6 +213,27 @@ EXPORT extern void *egl;
 #define LOAD_EGL(name) LOAD_LIB(egl, name)
 
 #define LOAD_GBM(name) LOAD_LIB(gbm, name)
+
+#if defined(AMIGAOS4) || defined(NOEGL) || defined(__EMSCRIPTEN__)
+#define LOAD_GLES_OES(name) \
+    DEFINE_RAW(gles, name); \
+    { \
+        LOAD_RAW(gles, name, proc_address(gles, #name"OES")); \
+    }
+
+#define LOAD_GLES_EXT(name) \
+    DEFINE_RAW(gles, name); \
+    { \
+        LOAD_RAW(gles, name, proc_address(gles, #name"EXT")); \
+    }
+
+#define LOAD_GLES2_OR_OES(name) \
+    DEFINE_RAW(gles, name); \
+    { \
+        LOAD_RAW_SILENT(gles, name, proc_address(gles, #name)); \
+    }
+
+#else // defined(AMIGAOS4) || defined(NOEGL)
 
 #define LOAD_EGL_EXT(name) \
     DEFINE_RAW(egl, name); \
@@ -232,11 +253,12 @@ EXPORT extern void *egl;
         LOAD_RAW(gles, name, egl_eglGetProcAddress(#name"EXT")); \
     }
 
-#define LOAD_GLES3_OR_OES(name) \
+#define LOAD_GLES2_OR_OES(name) \
     DEFINE_RAW(gles, name); \
     { \
         LOAD_EGL(eglGetProcAddress); \
         LOAD_RAW_SILENT(gles, name, ((hardext.esversion==1)?((void*)egl_eglGetProcAddress(#name"OES")):((void*)dlsym(gles, #name)))); \
     }
+#endif // defined(AMIGAOS4) || defined(NOEGL)
 
 #endif // _GL4ES_LOADER_H_

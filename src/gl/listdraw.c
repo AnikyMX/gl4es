@@ -22,9 +22,9 @@ typedef struct array2vbo_s {
 
 int list2VBO(renderlist_t* list)
 {
-    LOAD_GLES3(glGenBuffers);
-    LOAD_GLES3(glBufferData);
-    LOAD_GLES3(glBufferSubData);
+    LOAD_GLES2(glGenBuffers);
+    LOAD_GLES2(glBufferData);
+    LOAD_GLES2(glBufferSubData);
     array2vbo_t work[ATT_MAX] = {0};
     // list -> work
     int imax = 0;
@@ -754,8 +754,8 @@ void draw_renderlist(renderlist_t *list) {
                     int vbo_indices = 0;
                     if(!use_vbo_indices) {
                         // create VBO for indices
-                        LOAD_GLES3(glGenBuffers);
-                        LOAD_GLES3(glBufferData);
+                        LOAD_GLES2(glGenBuffers);
+                        LOAD_GLES2(glBufferData);
                         gles_glGenBuffers(1, &list->vbo_indices);
                         bindBuffer(GL_ELEMENT_ARRAY_BUFFER, list->vbo_indices);
                         gles_glBufferData(GL_ELEMENT_ARRAY_BUFFER, list->ilen*sizeof(GLushort), indices, GL_STATIC_DRAW);

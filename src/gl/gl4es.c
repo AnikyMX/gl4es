@@ -1,6 +1,8 @@
 #include "gl4es.h"
 
+#if defined(AMIGAOS4) || (defined(NOX11) && defined(NOEGL) && !defined(_WIN32))
 #include <sys/time.h>
+#endif // defined(AMIGAOS4) || (defined(NOX11) && defined(NOEGL)
 
 #include "../config.h"
 #include "../glx/hardext.h"
@@ -1075,7 +1077,7 @@ void APIENTRY_GL4ES gl4es_glShadeModel(GLenum mode) {
     if(mode==glstate->shademodel)
         return;
     glstate->shademodel = mode;
-    LOAD_GLES3(glShadeModel);
+    LOAD_GLES2(glShadeModel);
     if(gles_glShadeModel) {
         errorGL();
         gles_glShadeModel(mode);
@@ -1113,7 +1115,7 @@ void APIENTRY_GL4ES gl4es_glLogicOp(GLenum opcode) {
         return;
     // TODO: test if opcode is valid
     glstate->logicop = opcode;
-    LOAD_GLES3(glLogicOp);
+    LOAD_GLES2(glLogicOp);
     if(gles_glLogicOp) {
         errorGL();
         gles_glLogicOp(opcode);
@@ -1174,6 +1176,12 @@ void gl4es_scratch_vertex(int alloc) {
         gles_glGenBuffers(1, &glstate->scratch_vertex);
     }
     if(glstate->scratch_vertex_size < alloc) {
+#ifdef AMIGAOS4
+        LOAD_GLES(glDeleteBuffers);
+        GLuint old_buffer = glstate->scratch_vertex;
+        gles_glGenBuffers(1, &glstate->scratch_vertex);
+        deleteSingleBuffer(old_buffer);
+#endif
         bindBuffer(GL_ARRAY_BUFFER, glstate->scratch_vertex);
         gles_glBufferData(GL_ARRAY_BUFFER, alloc, NULL, GL_STREAM_DRAW);
         glstate->scratch_vertex_size = alloc;
@@ -1202,8 +1210,12 @@ void gl4es_use_scratch_indices(int use) {
     bindBuffer(GL_ELEMENT_ARRAY_BUFFER, use?glstate->scratch_indices:0);
 }
 
-#if defined(NOX11) && defined(NOEGL)
+#if defined(AMIGAOS4) || (defined(NOX11) && defined(NOEGL))
+#ifdef AMIGAOS4
+void amiga_pre_swap()
+#else
 NonAliasExportDecl(void,gl4es_pre_swap,())
+#endif
 {
     if (glstate->list.active) gl4es_flush();
     if (glstate->raster.bm_drawing) bitmap_flush();
@@ -1255,7 +1267,11 @@ void show_fps() {
 }
 
 
+#ifdef AMIGAOS4
+void amiga_post_swap()
+#else
 NonAliasExportDecl(void,gl4es_post_swap,())
+#endif
 {
 		show_fps();
 
