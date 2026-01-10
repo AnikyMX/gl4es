@@ -113,12 +113,6 @@ void APIENTRY_GL4ES gl4es_glScissor(GLint x, GLint y, GLsizei width, GLsizei hei
 
 	if(!glstate->list.pending) 
 	    PUSH_IF_COMPILING(glScissor);
-#ifdef AMIGAOS4
-	if(x<0) {width+=x; x=0;}
-	if(y<0) {height+=y; y=0;}
-	if(x+width>glstate->raster.viewport.width+glstate->raster.viewport.x) width = glstate->raster.viewport.width+glstate->raster.viewport.x - x;
-	if(y+height>glstate->raster.viewport.height+glstate->raster.viewport.y) height = glstate->raster.viewport.height+glstate->raster.viewport.y - y;
-#endif
 	if(	glstate->raster.scissor.x!=x || 
 		glstate->raster.scissor.y!=y || 
 		glstate->raster.scissor.width!=width || 

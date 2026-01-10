@@ -1,10 +1,6 @@
 #ifndef _GL4ES_INIT_H_
 #define _GL4ES_INIT_H_
 
-#if defined(PANDORA)
-#define USE_FBIO 1
-#endif
-
 typedef struct _globals4es {
  int nobanner;
  int mergelist;

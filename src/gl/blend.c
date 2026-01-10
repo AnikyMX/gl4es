@@ -107,7 +107,6 @@ void APIENTRY_GL4ES gl4es_glBlendFuncSeparate(GLenum sfactorRGB, GLenum dfactorR
         glstate->fpe_state->blendsrcalpha = srcalpha;
         glstate->fpe_state->blenddstalpha = dstalpha;
     } else {
-    #ifndef PANDORA
         if(gles_glBlendFuncSeparate==NULL) {
             // some fallback function to have better rendering with SDL2, better then nothing...
             if(sfactorRGB==GL_SRC_ALPHA && dfactorRGB==GL_ONE_MINUS_SRC_ALPHA && sfactorAlpha==GL_ONE && dfactorAlpha==GL_ONE_MINUS_SRC_ALPHA)
@@ -118,9 +117,9 @@ void APIENTRY_GL4ES gl4es_glBlendFuncSeparate(GLenum sfactorRGB, GLenum dfactorR
                 gl4es_glBlendFunc(GL_ZERO, GL_SRC_COLOR);
             else if (sfactorRGB==sfactorAlpha && dfactorRGB==dfactorAlpha)
                 gl4es_glBlendFunc(sfactorRGB, dfactorRGB);
-        } else
-    #endif
-        gles_glBlendFuncSeparate(sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha);
+        } else {
+            gles_glBlendFuncSeparate(sfactorRGB, dfactorRGB, sfactorAlpha, dfactorAlpha);
+        }
     }
 
     glstate->blendsfactorrgb = sfactorRGB;
@@ -150,9 +149,7 @@ void APIENTRY_GL4ES gl4es_glBlendEquationSeparate(GLenum modeRGB, GLenum modeA) 
         glstate->fpe_state->blendeqalpha = alpha;
     } else {
         LOAD_GLES3_OR_OES(glBlendEquationSeparate);
-        #ifndef PANDORA
         if(gles_glBlendEquationSeparate)
-        #endif
         gles_glBlendEquationSeparate(modeRGB, modeA);
     }
 

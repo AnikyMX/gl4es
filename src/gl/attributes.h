@@ -170,13 +170,8 @@
    //#warning Arm Hardfloat detected
    #define FASTMATH
   #else // __ARM_PCS_VFP
-   #if defined(__ARM_FP) && defined(PANDORA)
-    //#warning Arm SoftFP detected
-    #define FASTMATH __attribute__((pcs("aapcs-vfp")))
-   #else // defined(__ARM_FP) && defined(PANDORA)
 	//#warning Arm no FP detected
 	#define FASTMATH
-   #endif // defined(__ARM_FP) && defined(PANDORA)
   #endif // __ARM_PCS_VFP
  #else // __arm__
   #define FASTMATH

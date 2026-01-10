@@ -6,10 +6,6 @@
 #include "gl4es.h"
 #include "glstate.h"
 
-#ifdef PANDORA
-void pandora_set_gamma();
-#endif
-
 void APIENTRY_GL4ES gl4es_glHint(GLenum pname, GLenum mode) {
     
     FLUSH_BEGINEND;
@@ -123,9 +119,6 @@ void APIENTRY_GL4ES gl4es_glHint(GLenum pname, GLenum mode) {
             break;
         case GL_GAMMA_HINT_GL4ES:
             globals4es.gamma = ((float)mode)/10.f;
-#ifdef PANDORA
-            pandora_set_gamma();
-#endif
             break;
         default:
             errorGL();

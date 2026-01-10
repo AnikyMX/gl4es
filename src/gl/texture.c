@@ -1326,9 +1326,6 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
                 nheight = height;
             }
         }
-#ifdef PANDORA
-#define NO_1x1
-#endif
 #ifdef NO_1x1
         #define MIN_SIZE 2
         if(level==0 && hardext.esversion==1) {

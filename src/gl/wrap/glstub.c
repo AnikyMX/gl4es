@@ -17,9 +17,6 @@ AliasExport(ret,def,,args);
 STUB(void,glFogCoordf,(GLfloat coord));
 STUB(void,glFogCoorddv,(const GLdouble *coord));
 STUB(void,glFogCoordfv,(const GLfloat *coord));*/
-#ifdef BCMHOST
-STUB(void,glDiscardFramebufferEXT,(GLenum target, GLsizei numAttachments, const GLenum *attachments));
-#endif
 
 /*
 STUB(void glBlendEquationSeparatei(GLuint buf, GLenum modeRGB, GLenum modeAlpha))

@@ -99,19 +99,13 @@ void GetHardwareExtensions(int notest)
     hardext.esversion = globals4es.es;
     if(notest) 
     {
-#ifndef AMIGAOS4
         SHUT_LOGD("Hardware test disabled, nothing activated...\n");
-#endif
         if(hardext.esversion==2) {
             hardext.maxteximage = 4;
             hardext.maxvarying = 8;
             hardext.maxtex = 8;
             hardext.maxvattrib = 16;
-#ifdef AMIGAOS4
-            hardext.npot = 3;
-#else
             hardext.npot = 1;
-#endif
             hardext.fbo = 1; 
             hardext.blendcolor = 1;
             hardext.blendsub = 1;
@@ -122,15 +116,9 @@ void GetHardwareExtensions(int notest)
             hardext.pointsize = 1;
             hardext.cubemap = 1;
             hardext.maxdrawbuffers = 1;
-#ifdef AMIGAOS4
-            hardext.glsl300es = 1;
-#endif
         }
         return;
     }
-#if defined(BCMHOST) && !defined(ANDROID)
-    rpi_init();
-#endif
 #ifdef NOEGL
     SHUT_LOGD("Hardware test on current Context...\n");
 #else
@@ -177,18 +165,10 @@ void GetHardwareExtensions(int notest)
     egl_attribs[i++] = EGL_NONE;
 
     EGLint configAttribs[] = {
-#ifdef PANDORA
-    // on the Pandora, there don't seem to exist a 8888 PBuffer config for GLES2.
-        EGL_RED_SIZE, (hardext.esversion==1)?8:5,
-        EGL_GREEN_SIZE, (hardext.esversion==1)?8:6,
-        EGL_BLUE_SIZE, (hardext.esversion==1)?8:5,
-        EGL_ALPHA_SIZE, (hardext.esversion==1)?8:0,
-#else
         EGL_RED_SIZE, 8,
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, 8,
-#endif
         EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
         EGL_RENDERABLE_TYPE, (hardext.esversion==1)?EGL_OPENGL_ES_BIT:EGL_OPENGL_ES2_BIT,
         EGL_NONE
@@ -221,7 +201,6 @@ void GetHardwareExtensions(int notest)
         hardext.gbm = 1;
     }
 #endif
-#ifndef PANDORA
     if(!configsFound) {
         // try without alpha channel
         configAttribs[4*2-1] = 0;
@@ -231,7 +210,6 @@ void GetHardwareExtensions(int notest)
             hardext.eglnoalpha = 1;
         }
     }
-#endif
     if(!configsFound) {
         SHUT_LOGE("Error while gathering supported extension (eglChooseConfig: %s), default to none\n", PrintEGLError(0));
         egl_eglTerminate(eglDisplay);
