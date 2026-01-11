@@ -208,6 +208,7 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
         bindBuffer(target, buff->real_buffer);
 
         if(usage == GL_DYNAMIC_DRAW && buff->real_buffer && size == buff->size) {
+        	LOAD_GLES(glBufferSubData);
             gles_glBufferData(target, size, NULL, usage);
             if(data)
                 gles_glBufferSubData(target, 0, size, data);
