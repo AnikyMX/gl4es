@@ -331,8 +331,23 @@ void APIENTRY_GL4ES gl4es_glBufferSubData(GLenum target, GLintptr offset, GLsize
         bindBuffer(target, buff->real_buffer);
         gles_glBufferSubData(target, offset, size, data);
     }
-        
+    
     memcpy((char*)buff->data + offset, data, size);
+
+    if(!buff->mapped) {
+        GLintptr end = offset + size;
+        if(buff->dirty_length == 0) {
+            buff->dirty_start = offset;
+            buff->dirty_length = size;
+        } else {
+            GLintptr dirty_end = buff->dirty_start + buff->dirty_length;
+            if(offset < buff->dirty_start)
+                buff->dirty_start = offset;
+            if(end > dirty_end)
+                buff->dirty_length = end - buff->dirty_start;
+        }
+    }
+    
     noerrorShim();
 }
 void APIENTRY_GL4ES gl4es_glNamedBufferSubData(GLuint buffer, GLintptr offset, GLsizeiptr size, const GLvoid * data) {
@@ -394,8 +409,12 @@ void APIENTRY_GL4ES gl4es_glDeleteBuffers(GLsizei n, const GLuint * buffers) {
                             glstate->vao->vertexattrib[j].real_buffer = 0;
                             glstate->vao->vertexattrib[j].real_pointer = 0;
                         }
-                    DBG(printf("\t buff->data = %p\n", buff->data);)
+                    DBG(printf("\t buff->data = %p (capacity=%zd)\n", buff->data, buff->capacity);)
                     if (buff->data) free(buff->data);
+                    buff->capacity = 0;
+                    buff->static_data = 0;
+                    buff->dirty_start = 0;
+                    buff->dirty_length = 0;
                     kh_del(buff, list, k);
                     free(buff);
                 }
@@ -493,11 +512,13 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-	buff->access = access;	// not used
+	buff->access = access;
 	buff->mapped = 1;
     buff->ranged = 0;
+    buff->dirty_start = 0;
+    buff->dirty_length = 0;
 	noerrorShim();
-	return buff->data;		// Not nice, should do some copy or something probably
+	return buff->data;
 }
 void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
     DBG(printf("glMapNamedBuffer(%u, %s)\n", buffer, PrintEnum(access));)
@@ -541,7 +562,15 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(buff->type, buff->real_buffer);
-        gles_glBufferSubData(buff->type, 0, buff->size, buff->data);
+
+        if(buff->dirty_length > 0 && buff->dirty_length < buff->size) {
+            gles_glBufferSubData(buff->type, buff->dirty_start, buff->dirty_length, (char*)buff->data + buff->dirty_start);
+            DBG(printf("Partial upload: offset=%ld, length=%ld (saved %ld bytes)\n", buff->dirty_start, buff->dirty_length, buff->size - buff->dirty_length);)
+        } else {
+            gles_glBufferSubData(buff->type, 0, buff->size, buff->data);
+        }
+        buff->dirty_start = 0;
+        buff->dirty_length = 0;
     }
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && buff->ranged && (buff->access&GL_MAP_WRITE_BIT_EXT) && !(buff->access&GL_MAP_FLUSH_EXPLICIT_BIT_EXT)) {
         LOAD_GLES(glBufferSubData);
@@ -666,6 +695,10 @@ void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsi
     buff->ranged = 1;
     buff->offset = offset;
     buff->length = length;
+    if(access & GL_MAP_WRITE_BIT_EXT) {
+        buff->dirty_start = offset;
+        buff->dirty_length = length;
+    }
 	noerrorShim();
     uintptr_t ret = (uintptr_t)buff->data;
     ret += offset;
