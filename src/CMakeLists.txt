@@ -253,3 +253,24 @@ if(EGL_WRAPPER)
     endif()
 endif()
 
+# --- GLSL OPTIMIZER INTEGRATION (REVISED) ---
+# Deteksi apakah folder optimizer ada
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/glsl_optimizer/CMakeLists.txt")
+    message(STATUS "GLSL Optimizer Found! Enabling Integration...")
+    
+    # 1. Masukkan folder project optimizer
+    add_subdirectory(glsl_optimizer)
+    
+    # 2. Link librarynya (Nama target default Aras-P biasanya 'glsl_optimizer')
+    target_link_libraries(GL glsl_optimizer)
+    
+    # 3. Include path (SESUAI HASIL FIND KAMU)
+    # Header ada di: src/glsl_optimizer/src/glsl/
+    include_directories(glsl_optimizer/src/glsl)
+    
+    # Definisi Preprocessor agar kode C tahu kita pakai optimizer
+    add_definitions(-DGLSL_OPTIMIZER)
+else()
+    message(WARNING "GLSL Optimizer folder not found in src/glsl_optimizer. Skipping...")
+endif()
+# --- END INTEGRATION ---
