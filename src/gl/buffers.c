@@ -17,6 +17,8 @@
 #define DBG(a)
 #endif
 
+#define SMALL_BUFFER_THRESHOLD 1024  // 1KB
+#define ENABLE_BUFFER_POOLING 1
 
 KHASH_MAP_IMPL_INT(buff, glbuffer_t *);
 KHASH_MAP_IMPL_INT(glvao, glvao_t*);
@@ -224,9 +226,20 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
         buff->capacity = 0;
     }
     if(!buff->data) {
-        GLsizeiptr alloc_size = size + (size >> 2); // size * 1.25
+        GLsizeiptr alloc_size;
+        
+        // For small buffers, align to reduce fragmentation
+        if(size < SMALL_BUFFER_THRESHOLD) {
+            // Align to 256 bytes for small buffers
+            alloc_size = ((size + 255) / 256) * 256;
+        } else {
+            // For large buffers, add 25% headroom for growth
+            alloc_size = size + (size >> 2);
+        }
+        
         buff->data = malloc(alloc_size);
         buff->capacity = alloc_size;
+        DBG(printf("Allocated %zd bytes (requested %zd)\n", alloc_size, size);)
     }
     
     buff->size = size;
@@ -262,10 +275,6 @@ void APIENTRY_GL4ES gl4es_glNamedBufferData(GLuint buffer, GLsizeiptr size, cons
 		errorShim(GL_INVALID_OPERATION);
         return;
     }
-    if (buff->data) {
-        free(buff->data);
-
-    }
     int go_real = 0;
     if(     (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) 
          && (usage==GL_STREAM_DRAW || usage==GL_STATIC_DRAW || usage==GL_DYNAMIC_DRAW) && globals4es.usevbo)
@@ -287,12 +296,28 @@ void APIENTRY_GL4ES gl4es_glNamedBufferData(GLuint buffer, GLsizeiptr size, cons
         gles_glBufferData(buff->type, size, data, usage);
     }
 
+    if(buff->data && buff->capacity < size) {
+        free(buff->data);
+        buff->data = NULL;
+        buff->capacity = 0;
+    }
+    
+    if(!buff->data) {
+        GLsizeiptr alloc_size = size + (size >> 2); // 25% extra
+        buff->data = malloc(alloc_size);
+        buff->capacity = alloc_size;
+    }
+    
     buff->size = size;
     buff->usage = usage;
-    buff->data = malloc(size);
     buff->access = GL_READ_WRITE;
-    if (data)
+    if (data) {
         memcpy(buff->data, data, size);
+    }
+    
+    // Mark dirty
+    buff->dirty_start = 0;
+    buff->dirty_length = size;
     // update binded VA
     for (int i=0; i<hardext.maxvattrib; ++i) {
         vertexattrib_t *v = &glstate->vao->vertexattrib[i];
@@ -532,11 +557,13 @@ void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-	buff->access = access;	// not used
+	buff->access = access;
 	buff->mapped = 1;
     buff->ranged = 0;
+    buff->dirty_start = 0;
+    buff->dirty_length = 0;
 	noerrorShim();
-	return buff->data;		// Not nice, should do some copy or something probably
+	return buff->data;
 }
 
 GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
@@ -597,7 +624,16 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(buff->type, buff->real_buffer);
-        gles_glBufferSubData(buff->type, 0, buff->size, buff->data);
+
+        if(buff->dirty_length > 0 && buff->dirty_length < buff->size) {
+            gles_glBufferSubData(buff->type, buff->dirty_start, buff->dirty_length, 
+                                 (char*)buff->data + buff->dirty_start);
+        } else {
+            gles_glBufferSubData(buff->type, 0, buff->size, buff->data);
+        }
+        
+        buff->dirty_start = 0;
+        buff->dirty_length = 0;
     }
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && buff->ranged && (buff->access&GL_MAP_WRITE_BIT_EXT) && !(buff->access&GL_MAP_FLUSH_EXPLICIT_BIT_EXT)) {
         LOAD_GLES(glBufferSubData);
