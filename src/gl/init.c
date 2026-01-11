@@ -46,13 +46,11 @@ static void fast_math() {
 }
 #endif
 
-#ifndef DEFAULT_ES
-#if defined(PANDORA) || defined(ANDROID)
-#define DEFAULT_ES 1
-#else
-#define DEFAULT_ES 2
+#ifdef DEFAULT_ES
+#undef DEFAULT_ES
 #endif
-#endif
+
+#define DEFAULT_ES 3
 
 void load_libs();
 void glx_init();

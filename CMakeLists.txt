@@ -3,10 +3,7 @@ cmake_minimum_required(VERSION 3.22.1)
 # Import modules
 include(CheckCompilerFlag)
 
-project(gl4es LANGUAGES C CXX)
-
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+project(gl4es LANGUAGES C)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib)
@@ -71,7 +68,7 @@ if(NOT DEFAULT_ES)
     if(PANDORA)
         set(DEFAULT_ES 1)
     else()
-        set(DEFAULT_ES 2)
+        set(DEFAULT_ES 3)
     endif()
 endif()
 
@@ -116,7 +113,7 @@ endif()
 # Android
 if(ANDROID)
     add_definitions(-DANDROID)
-    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=2)
+    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=3)
 endif()
 
 if(USE_ANDROID_LOG)

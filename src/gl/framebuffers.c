@@ -57,7 +57,7 @@ void readfboBegin() {
     GLuint fbo = glstate->fbo.fbo_read->id;
     if (!fbo)
         fbo = glstate->fbo.mainfbo_fbo;
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
     gles_glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 }
 
@@ -71,7 +71,7 @@ void readfboEnd() {
     GLuint fbo = glstate->fbo.fbo_draw->id;
     if (!fbo)
         fbo = glstate->fbo.mainfbo_fbo;
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
     gles_glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 }
 
@@ -90,7 +90,7 @@ glrenderbuffer_t* find_renderbuffer(GLuint renderbuffer) {
 
 void APIENTRY_GL4ES gl4es_glGenFramebuffers(GLsizei n, GLuint *ids) {
     DBG(printf("glGenFramebuffers(%i, %p)\n", n, ids);)
-    LOAD_GLES2_OR_OES(glGenFramebuffers);
+    LOAD_GLES3_OR_OES(glGenFramebuffers);
     GLsizei m = 0;
     while(glstate->fbo.old && (glstate->fbo.old->nbr>0) && (n-m>0)) {
         DBG(printf("Recycled 1 FBO\n");)
@@ -183,7 +183,7 @@ void APIENTRY_GL4ES gl4es_glDeleteFramebuffers(GLsizei n, GLuint *framebuffers) 
         memcpy(glstate->fbo.old->fbos+glstate->fbo.old->nbr, framebuffers, n*sizeof(GLuint));
         glstate->fbo.old->nbr += n;
     } else {
-        LOAD_GLES2_OR_OES(glDeleteFramebuffers);
+        LOAD_GLES3_OR_OES(glDeleteFramebuffers);
         errorGL();
         gles_glDeleteFramebuffers(n, framebuffers);
     }
@@ -191,7 +191,7 @@ void APIENTRY_GL4ES gl4es_glDeleteFramebuffers(GLsizei n, GLuint *framebuffers) 
 
 GLboolean APIENTRY_GL4ES gl4es_glIsFramebuffer(GLuint framebuffer) {
     DBG(printf("glIsFramebuffer(%u)\n", framebuffer);)
-    LOAD_GLES2_OR_OES(glIsFramebuffer);
+    LOAD_GLES3_OR_OES(glIsFramebuffer);
     
     errorGL();
     return find_framebuffer(framebuffer)!=NULL;
@@ -203,7 +203,7 @@ GLenum APIENTRY_GL4ES gl4es_glCheckFramebufferStatus(GLenum target) {
         result = glstate->fbo.fb_status;
         noerrorShim();
      } else {
-        LOAD_GLES2_OR_OES(glCheckFramebufferStatus);
+        LOAD_GLES3_OR_OES(glCheckFramebufferStatus);
         
         errorGL();
         GLenum rtarget = target;
@@ -220,8 +220,8 @@ GLenum APIENTRY_GL4ES gl4es_glCheckFramebufferStatus(GLenum target) {
 void APIENTRY_GL4ES gl4es_glBindFramebuffer(GLenum target, GLuint framebuffer) {
     DBG(printf("glBindFramebuffer(%s, %u), list=%s, glstate->fbo.current_fb=%d (draw=%d, read=%d)\n", PrintEnum(target), framebuffer, glstate->list.active?"active":"none", glstate->fbo.current_fb->id, glstate->fbo.fbo_draw->id, glstate->fbo.fbo_read->id);)
     PUSH_IF_COMPILING(glBindFramebuffer);
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
-//    LOAD_GLES2_OR_OES(glCheckFramebufferStatus);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
+//    LOAD_GLES3_OR_OES(glCheckFramebufferStatus);
     LOAD_GLES(glGetError);
 
     glframebuffer_t *fb = find_framebuffer(framebuffer);
@@ -268,7 +268,7 @@ void APIENTRY_GL4ES gl4es_glBindFramebuffer(GLenum target, GLuint framebuffer) {
 GLenum ReadDraw_Push(GLenum target) {
     if(target==GL_FRAMEBUFFER)
         return GL_FRAMEBUFFER;
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
     if(target==GL_DRAW_FRAMEBUFFER) {
         if(glstate->fbo.current_fb!=glstate->fbo.fbo_draw)
             gles_glBindFramebuffer(GL_FRAMEBUFFER, (glstate->fbo.fbo_draw->id)?glstate->fbo.fbo_draw->id:glstate->fbo.mainfbo_fbo);
@@ -284,7 +284,7 @@ GLenum ReadDraw_Push(GLenum target) {
 void ReadDraw_Pop(GLenum target) {
     if(target==GL_FRAMEBUFFER)
         return;
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
     if(target==GL_DRAW_FRAMEBUFFER && glstate->fbo.current_fb!=glstate->fbo.fbo_draw) {
         gles_glBindFramebuffer(GL_FRAMEBUFFER, (glstate->fbo.current_fb->id)?glstate->fbo.current_fb->id:glstate->fbo.mainfbo_fbo);
     }
@@ -428,7 +428,7 @@ void APIENTRY_GL4ES gl4es_glFramebufferTexture2D(GLenum target, GLenum attachmen
     static int scrap_width = 0;
     static int scrap_height = 0;
     
-    LOAD_GLES2_OR_OES(glFramebufferTexture2D);
+    LOAD_GLES3_OR_OES(glFramebufferTexture2D);
     LOAD_GLES(glTexImage2D);
     LOAD_GLES(glBindTexture);
     LOAD_GLES(glActiveTexture);
@@ -817,7 +817,7 @@ void APIENTRY_GL4ES gl4es_glFramebufferTexture3D(GLenum target, GLenum attachmen
 
 void APIENTRY_GL4ES gl4es_glGenRenderbuffers(GLsizei n, GLuint *renderbuffers) {
     DBG(printf("glGenRenderbuffers(%i, %p)\n", n, renderbuffers);)
-    LOAD_GLES2_OR_OES(glGenRenderbuffers);
+    LOAD_GLES3_OR_OES(glGenRenderbuffers);
     errorGL();
     gles_glGenRenderbuffers(n, renderbuffers);
     // track the renderbuffers...
@@ -834,8 +834,8 @@ void APIENTRY_GL4ES gl4es_glGenRenderbuffers(GLsizei n, GLuint *renderbuffers) {
 
 void APIENTRY_GL4ES gl4es_glFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer) {
     DBG(printf("glFramebufferRenderbuffer(%s, %s, %s, %u)\n", PrintEnum(target), PrintEnum(attachment), PrintEnum(renderbuffertarget), renderbuffer);)
-    LOAD_GLES2_OR_OES(glFramebufferRenderbuffer);
-    LOAD_GLES2_OR_OES(glGetFramebufferAttachmentParameteriv);
+    LOAD_GLES3_OR_OES(glFramebufferRenderbuffer);
+    LOAD_GLES3_OR_OES(glGetFramebufferAttachmentParameteriv);
     LOAD_GLES(glGetError);
 
     glframebuffer_t *fb = get_framebuffer(target);
@@ -935,7 +935,7 @@ void APIENTRY_GL4ES gl4es_glFramebufferRenderbuffer(GLenum target, GLenum attach
 
 void APIENTRY_GL4ES gl4es_glDeleteRenderbuffers(GLsizei n, GLuint *renderbuffers) {
     DBG(printf("glDeleteRenderbuffer(%d, %p)\n", n, renderbuffers);)
-    LOAD_GLES2_OR_OES(glDeleteRenderbuffers);
+    LOAD_GLES3_OR_OES(glDeleteRenderbuffers);
     
     // check if we delete a depthstencil
     if (glstate->fbo.renderbufferlist)
@@ -967,9 +967,9 @@ void APIENTRY_GL4ES gl4es_glDeleteRenderbuffers(GLsizei n, GLuint *renderbuffers
 
 void APIENTRY_GL4ES gl4es_glRenderbufferStorage(GLenum target, GLenum internalformat, GLsizei width, GLsizei height) {
     DBG(printf("glRenderbufferStorage(%s, %s, %i, %i)\n", PrintEnum(target), PrintEnum(internalformat), width, height);)
-    LOAD_GLES2_OR_OES(glRenderbufferStorage);
-    LOAD_GLES2_OR_OES(glGenRenderbuffers);
-    LOAD_GLES2_OR_OES(glBindRenderbuffer);
+    LOAD_GLES3_OR_OES(glRenderbufferStorage);
+    LOAD_GLES3_OR_OES(glGenRenderbuffers);
+    LOAD_GLES3_OR_OES(glBindRenderbuffer);
 
     glrenderbuffer_t *rend = glstate->fbo.current_rb;
     if(!rend->renderbuffer) {
@@ -1021,7 +1021,7 @@ void APIENTRY_GL4ES gl4es_glRenderbufferStorage(GLenum target, GLenum internalfo
             gles_glRenderbufferStorage(target, GL_STENCIL_INDEX8, width, height);
             gles_glBindRenderbuffer(GL_RENDERBUFFER, current_rb);
         } else {
-            LOAD_GLES2_OR_OES(glDeleteRenderbuffers);
+            LOAD_GLES3_OR_OES(glDeleteRenderbuffers);
             gles_glDeleteRenderbuffers(1, &rend->secondarybuffer);
             rend->secondarybuffer = 0;
         }
@@ -1060,7 +1060,7 @@ void APIENTRY_GL4ES gl4es_glRenderbufferStorageMultisample(GLenum target, GLsize
 
 void APIENTRY_GL4ES gl4es_glBindRenderbuffer(GLenum target, GLuint renderbuffer) {
     DBG(printf("glBindRenderbuffer(%s, %u), binded Fbo=%u\n", PrintEnum(target), renderbuffer, glstate->fbo.current_fb->id);)
-    LOAD_GLES2_OR_OES(glBindRenderbuffer);
+    LOAD_GLES3_OR_OES(glBindRenderbuffer);
     
     GLuint current = glstate->fbo.current_rb->renderbuffer;
     if(current==renderbuffer) {
@@ -1086,7 +1086,7 @@ GLboolean APIENTRY_GL4ES gl4es_glIsRenderbuffer(GLuint renderbuffer) {
 
 void APIENTRY_GL4ES gl4es_glGenerateMipmap(GLenum target) {
     DBG(printf("glGenerateMipmap(%s)\n", PrintEnum(target));)
-    LOAD_GLES2_OR_OES(glGenerateMipmap);
+    LOAD_GLES3_OR_OES(glGenerateMipmap);
     
     const GLuint rtarget = map_tex_target(target);
     realize_bound(glstate->texture.active, target);
@@ -1109,7 +1109,7 @@ void APIENTRY_GL4ES gl4es_glGenerateMipmap(GLenum target) {
 
 void APIENTRY_GL4ES gl4es_glGetFramebufferAttachmentParameteriv(GLenum target, GLenum attachment, GLenum pname, GLint *params) {
     DBG(printf("glGetFramebufferAttachmentParameteriv(%s, %s, %s, %p)\n", PrintEnum(target), PrintEnum(attachment), PrintEnum(pname), params);)
-    LOAD_GLES2_OR_OES(glGetFramebufferAttachmentParameteriv);
+    LOAD_GLES3_OR_OES(glGetFramebufferAttachmentParameteriv);
 
     glframebuffer_t *fb = get_framebuffer(target);
     if(!fb) {
@@ -1200,27 +1200,27 @@ void APIENTRY_GL4ES gl4es_glGetFramebufferAttachmentParameteriv(GLenum target, G
 
 void APIENTRY_GL4ES gl4es_glGetRenderbufferParameteriv(GLenum target, GLenum pname, GLint * params) {
     DBG(printf("glGetRenderbufferParameteriv(%s, %s, %p)\n", PrintEnum(target), PrintEnum(pname), params);)
-    LOAD_GLES2_OR_OES(glGetRenderbufferParameteriv);
+    LOAD_GLES3_OR_OES(glGetRenderbufferParameteriv);
     
     errorGL();
     gles_glGetRenderbufferParameteriv(target, pname, params);
 }
 
 void createMainFBO(int width, int height) {
-    LOAD_GLES2_OR_OES(glGenFramebuffers);
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
-    LOAD_GLES2_OR_OES(glFramebufferTexture2D);
-    LOAD_GLES2_OR_OES(glCheckFramebufferStatus);
-    LOAD_GLES2_OR_OES(glFramebufferRenderbuffer);
-    LOAD_GLES2_OR_OES(glRenderbufferStorage);
-    LOAD_GLES2_OR_OES(glGenRenderbuffers);
-    LOAD_GLES2_OR_OES(glBindRenderbuffer);
+    LOAD_GLES3_OR_OES(glGenFramebuffers);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
+    LOAD_GLES3_OR_OES(glFramebufferTexture2D);
+    LOAD_GLES3_OR_OES(glCheckFramebufferStatus);
+    LOAD_GLES3_OR_OES(glFramebufferRenderbuffer);
+    LOAD_GLES3_OR_OES(glRenderbufferStorage);
+    LOAD_GLES3_OR_OES(glGenRenderbuffers);
+    LOAD_GLES3_OR_OES(glBindRenderbuffer);
     LOAD_GLES(glTexImage2D);
     LOAD_GLES(glGenTextures);
     LOAD_GLES(glBindTexture);
     LOAD_GLES(glActiveTexture);
     void gles_glTexParameteri(glTexParameteri_ARG_EXPAND); //LOAD_GLES(glTexParameteri);
-    LOAD_GLES2(glClientActiveTexture);
+    LOAD_GLES3(glClientActiveTexture);
     LOAD_GLES(glClear);
 
     // If there is already a Framebuffer created, let's delete it.... unless it's already the right size!
@@ -1337,8 +1337,8 @@ void blitMainFBO(int x, int y, int width, int height) {
 }
 
 void bindMainFBO() {
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
-    LOAD_GLES2_OR_OES(glCheckFramebufferStatus);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
+    LOAD_GLES3_OR_OES(glCheckFramebufferStatus);
     if (!glstate->fbo.mainfbo_fbo)
         return;
     if (glstate->fbo.current_fb->id==0) {
@@ -1348,7 +1348,7 @@ void bindMainFBO() {
 }
 
 void unbindMainFBO() {
-    LOAD_GLES2_OR_OES(glBindFramebuffer);
+    LOAD_GLES3_OR_OES(glBindFramebuffer);
     if (!glstate->fbo.mainfbo_fbo)
         return;
     if (glstate->fbo.current_fb->id==0) {
@@ -1357,8 +1357,8 @@ void unbindMainFBO() {
 }
 
 void deleteMainFBO(void *state) {
-    LOAD_GLES2_OR_OES(glDeleteFramebuffers);
-    LOAD_GLES2_OR_OES(glDeleteRenderbuffers);
+    LOAD_GLES3_OR_OES(glDeleteFramebuffers);
+    LOAD_GLES3_OR_OES(glDeleteRenderbuffers);
     LOAD_GLES(glDeleteTextures);
 
     glstate_t *glstate = (glstate_t*)state;
@@ -1505,7 +1505,7 @@ GLuint gl4es_getCurrentFBO() {
 }
 
 void gl4es_setCurrentFBO() {
-  LOAD_GLES2_OR_OES(glBindFramebuffer);
+  LOAD_GLES3_OR_OES(glBindFramebuffer);
   gles_glBindFramebuffer(GL_FRAMEBUFFER, (glstate->fbo.current_fb->id)?glstate->fbo.current_fb->id:glstate->fbo.mainfbo_fbo);
 }
 
@@ -1728,7 +1728,7 @@ void gl4es_saveCurrentFBO()
     if(framebuffer==0)
         framebuffer = glstate->fbo.mainfbo_fbo;
     if(framebuffer) {
-        LOAD_GLES2_OR_OES(glBindFramebuffer);
+        LOAD_GLES3_OR_OES(glBindFramebuffer);
         if(hardext.vendor&VEND_ARM)
             gl4es_glFinish(); //MALI seems to need a flush commandbefore unbinding the Framebuffer here
         gles_glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1742,7 +1742,7 @@ void gl4es_restoreCurrentFBO()
     if(framebuffer==0)
         framebuffer = glstate->fbo.mainfbo_fbo;
     if(framebuffer) {
-        LOAD_GLES2_OR_OES(glBindFramebuffer);
+        LOAD_GLES3_OR_OES(glBindFramebuffer);
         gles_glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     }
 }

@@ -73,7 +73,7 @@ void gl4es_glGenSamplers(GLsizei n, GLuint *ids)
 {
     DBG(printf("glGenSamplers(%i, %p)\n", n, ids);)
     // no hardware support taken into account for now
-    /*LOAD_GLES2_OR_OES(glGenFramebuffers);
+    /*LOAD_GLES3_OR_OES(glGenFramebuffers);
     GLsizei m = 0;
     noerrorShim();
     if(n-m) {
