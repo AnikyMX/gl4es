@@ -43,9 +43,9 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     target_link_libraries(glsl_test ${OpenGL_LIBRARY})
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
-file(GLOB glslopt_sources contrib/glslopt/*.cpp)
-add_executable(glslopt ${glslopt_sources})
-target_link_libraries(glslopt glsl_optimizer)
+# file(GLOB glslopt_sources contrib/glslopt/*.cpp)
+# add_executable(glslopt ${glslopt_sources})
+# target_link_libraries(glslopt glsl_optimizer)
 
 #add_executable(glcpp src/glsl/glcpp/glcpp.c)
 #target_link_libraries(glcpp glsl_optimizer)
