@@ -18,6 +18,10 @@ typedef struct {
     GLintptr    offset;
     GLsizeiptr  length;
     GLvoid     *data;
+    GLsizeiptr  capacity;       // Allocated capacity (for buffer reuse)
+    int         static_data;    // Flag if data is static (avoid copy)
+    GLintptr    dirty_start;    // Dirty range tracking
+    GLsizeiptr  dirty_length;   // for partial uploads
 } glbuffer_t;
 
 KHASH_MAP_DECLARE_INT(buff, glbuffer_t *);

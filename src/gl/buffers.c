@@ -112,13 +112,17 @@ void APIENTRY_GL4ES gl4es_glGenBuffers(GLsizei n, GLuint * buffers) {
         k = kh_put(buff, list, b, &ret);
         glbuffer_t *buff = kh_value(list, k) = malloc(sizeof(glbuffer_t));
         buff->buffer = b;
-        buff->type = 0; // no target for now
+        buff->type = 0;
         buff->data = NULL;
         buff->usage = GL_STATIC_DRAW;
         buff->size = 0;
         buff->access = GL_READ_WRITE;
         buff->mapped = 0;
         buff->real_buffer = 0;
+        buff->capacity = 0;
+        buff->static_data = 0;
+        buff->dirty_start = 0;
+        buff->dirty_length = 0;
     }
 }
 
@@ -154,6 +158,10 @@ void APIENTRY_GL4ES gl4es_glBindBuffer(GLenum target, GLuint buffer) {
             buff->access = GL_READ_WRITE;
             buff->mapped = 0;
             buff->real_buffer = 0;
+            buff->capacity = 0;
+            buff->static_data = 0;
+            buff->dirty_start = 0;
+            buff->dirty_length = 0;
         } else {
             buff = kh_value(list, k);
             buff->type = target;    //TODO: check if old binding?
@@ -198,22 +206,42 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
         LOAD_GLES(glBufferData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(target, buff->real_buffer);
-        gles_glBufferData(target, size, data, usage);
+
+        if(usage == GL_DYNAMIC_DRAW && buff->real_buffer && size == buff->size) {
+            gles_glBufferData(target, size, NULL, usage);
+            if(data)
+                gles_glBufferSubData(target, 0, size, data);
+        } else {
+            gles_glBufferData(target, size, data, usage);
+        }
         DBG(printf(" => real VBO %d\n", buff->real_buffer);)
     }
-        
-        if (buff->data && buff->size<size) {
+
+    if (buff->data && buff->capacity < size) {
         free(buff->data);
         buff->data = NULL;
+        buff->capacity = 0;
     }
-    if(!buff->data)
-        buff->data = malloc(size);
+    if(!buff->data) {
+        GLsizeiptr alloc_size = size + (size >> 2); // size * 1.25
+        buff->data = malloc(alloc_size);
+        buff->capacity = alloc_size;
+    }
+    
     buff->size = size;
     buff->usage = usage;
-    DBG(printf("\t buff->data = %p (size=%zd)\n", buff->data, size);)
+    DBG(printf("\t buff->data = %p (size=%zd, capacity=%zd)\n", buff->data, size, buff->capacity);)
     buff->access = GL_READ_WRITE;
-    if (data)
+    if (data) {
         memcpy(buff->data, data, size);
+        buff->static_data = 0;
+    } else {
+        // NULL data = reserve buffer
+        buff->static_data = 0;
+    }
+
+    buff->dirty_start = 0;
+    buff->dirty_length = size;
     // update binded VA
     for (int i=0; i<hardext.maxvattrib; ++i) {
         vertexattrib_t *v = &glstate->vao->vertexattrib[i];
