@@ -1,5 +1,7 @@
 #include "shader.h"
 
+#include "glsl_optimizer.h"
+
 #include "../glx/hardext.h"
 #include "debug.h"
 #include "init.h"
@@ -176,6 +178,53 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
             glshader->converted = strdup(glshader->source);
         else
             glshader->converted = ConvertShader(glshader->source, glshader->type==GL_VERTEX_SHADER?1:0, &glshader->need);
+
+        // ==========================================================
+        // [MOD] GLSL OPTIMIZER INTEGRATION - SAFETY FIRST APPROACH
+        // ==========================================================
+        #ifdef GLSL_OPTIMIZER
+        // Kita HANYA mengoptimalkan Fragment Shader.
+        // Vertex shader biasanya ringan, dan optimizer memakan CPU time.
+        // Fragment shader adalah beban utama PowerVR GE8320.
+        if (glshader->type == GL_FRAGMENT_SHADER && glshader->converted) {
+            
+            // 1. Inisialisasi Context Optimizer (Target: GLES 2.0 untuk PowerVR)
+            glslopt_ctx* opt_ctx = glslopt_initialize(kGlslTargetOpenGLES20);
+            
+            if (opt_ctx) {
+                // 2. Coba Optimalkan Kode
+                // kGlslOptShaderFragment memberitahu optimizer ini adalah pixel shader
+                glslopt_shader* opt_shader = glslopt_optimize(opt_ctx, kGlslOptShaderFragment, glshader->converted, 0);
+
+                // 3. SAFETY CHECK (Jaring Pengaman)
+                // Kita cek statusnya. Jika sukses, baru kita pakai.
+                if (glslopt_get_status(opt_shader)) {
+                    const char* optimizedCode = glslopt_get_output(opt_shader);
+                    
+                    // Pastikan output tidak kosong
+                    if (optimizedCode && strlen(optimizedCode) > 0) {
+                        // DBG(printf("Optimizer: SUCCESS for Shader %d\n", shader));
+                        
+                        // Ganti kode lama dengan kode hasil optimasi
+                        free(glshader->converted);
+                        glshader->converted = strdup(optimizedCode);
+                    }
+                } else {
+                    // Jika gagal, kita diam saja. 
+                    // Kode 'glshader->converted' yang asli tetap aman.
+                    // DBG(printf("Optimizer: FAILED or SKIPPED. Fallback to original.\n"));
+                }
+
+                // 4. Bersihkan memori optimizer agar tidak memory leak
+                glslopt_shader_delete(opt_shader);
+                glslopt_cleanup(opt_ctx);
+            }
+        }
+        #endif
+        // ==========================================================
+        // [END MOD]
+        // ==========================================================
+
         // send source to GLES2 hardware if any
         gles_glShaderSource(shader, 1, (const GLchar * const*)((glshader->converted)?(&glshader->converted):(&glshader->source)), NULL);
         errorGL();
