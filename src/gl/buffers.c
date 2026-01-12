@@ -10,6 +10,13 @@
 #include "init.h"
 #include "loader.h"
 
+#ifndef GL_MAP_INVALIDATE_BUFFER_BIT
+#define GL_MAP_INVALIDATE_BUFFER_BIT 0x0008
+#endif
+
+typedef void* (*glMapBufferRange_PTR)(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
+typedef GLboolean (*glUnmapBuffer_PTR)(GLenum target);
+
 //#define DEBUG
 #ifdef DEBUG
 #define DBG(a) a
