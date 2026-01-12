@@ -332,11 +332,14 @@ DBG(printf("glRotatef(%f, %f, %f, %f), list=%p\n", angle, x, y, z, glstate->list
 	memset(tmp, 0, 16*sizeof(GLfloat));
 	if((x==0 && y==0 && z==0) || angle==0)
 		return;	// nothing to do
-	// normalize x y z
-	GLfloat l = 1.0f/sqrtf(x*x+y*y+z*z);
-	x=x*l; y=y*l; z=z*l;
-	// calculate sin/cos
-	angle*=3.1415926535f/180.f;
+
+	GLfloat mag_sq = x*x + y*y + z*z;
+	if (mag_sq > 0.00001f && (mag_sq < 0.99999f || mag_sq > 1.00001f)) {
+		GLfloat l = 1.0f/sqrtf(mag_sq);
+		x*=l; y*=l; z*=l;
+	}
+
+	angle *= 0.01745329251f; 
 	const GLfloat s=sinf(angle); 
 	const GLfloat c=cosf(angle);
 	const GLfloat c1 = 1-c;

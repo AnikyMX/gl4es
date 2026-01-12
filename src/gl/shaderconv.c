@@ -1273,19 +1273,29 @@ char* ConvertShader(const char* pEntry, int isVertex, shaderconv_need_t *need)
 
 int isBuiltinAttrib(const char* name) {
     int n = sizeof(builtin_attrib)/sizeof(builtin_attrib_t);
+    if (!name || !name[0]) return -1;
+    
     for (int i=0; i<n; i++) {
+        if (builtin_attrib[i].name[7] != name[7]) continue;
+
         if (strcmp(builtin_attrib[i].name, name)==0)
             return builtin_attrib[i].attrib;
     }
     return -1;
 }
 
+
 int isBuiltinMatrix(const char* name) {
     int ret = -1;
     int n = sizeof(builtin_matrix)/sizeof(builtin_matrix_t);
+    if (!name || !name[0]) return -1;
+
     for (int i=0; i<n && ret==-1; i++) {
-        if (strncmp(builtin_matrix[i].name, name, strlen(builtin_matrix[i].name))==0) {
-            int l=strlen(builtin_matrix[i].name);
+        if (builtin_matrix[i].name[7] != name[7]) continue;
+
+        int l = strlen(builtin_matrix[i].name);
+
+        if (strncmp(builtin_matrix[i].name, name, l)==0) {
             if(strlen(name)==l 
             || (strlen(name)==l+3 && name[l]=='[' && builtin_matrix[i].texarray)
             || (strlen(name)==l+4 && name[l]=='[' && builtin_matrix[i].texarray)
