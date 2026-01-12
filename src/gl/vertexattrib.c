@@ -15,7 +15,7 @@
 
 void APIENTRY_GL4ES gl4es_glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid * pointer) {
     DBG(printf("glVertexAttribPointer(%d, %d, %s, %d, %d, %p), vertex %p buffer = %p\n", index, size, PrintEnum(type), normalized, stride, pointer, glstate->vao->vertex, (glstate->vao->vertex)?glstate->vao->vertex->data:0);)
-    FLUSH_BEGINEND;
+    
     // sanity test
     if(index>=hardext.maxvattrib) {
         errorShim(GL_INVALID_VALUE);
@@ -25,15 +25,31 @@ void APIENTRY_GL4ES gl4es_glVertexAttribPointer(GLuint index, GLint size, GLenum
         errorShim(GL_INVALID_VALUE);
         return;
     }
-    // TODO: test Type also
+
+    GLsizei effective_stride = stride;
+    if(effective_stride==0) effective_stride=((size==GL_BGRA)?4:size)*gl_sizeof(type);
+
     vertexattrib_t *v = &glstate->vao->vertexattrib[index];
+
+    if (v->size == size &&
+        v->type == type &&
+        v->normalized == normalized &&
+        v->stride == effective_stride &&
+        v->pointer == pointer &&
+        v->buffer == glstate->vao->vertex) {
+        
+        noerrorShim();
+        return;
+    }
+
+    FLUSH_BEGINEND;
+    
     noerrorShim();
-    if(stride==0) stride=((size==GL_BGRA)?4:size)*gl_sizeof(type);
     v->size = size;
     v->type = type;
     v->normalized = normalized;
     v->integer = 0;
-    v->stride = stride;
+    v->stride = effective_stride;
     v->pointer = pointer;
     v->buffer = glstate->vao->vertex;
     if( v->buffer ) {
@@ -44,9 +60,10 @@ void APIENTRY_GL4ES gl4es_glVertexAttribPointer(GLuint index, GLint size, GLenum
         v->real_pointer = 0;
     }
 }
+
 void APIENTRY_GL4ES gl4es_glVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const GLvoid * pointer) {
     DBG(printf("glVertexAttribIPointer(%d, %d, %s, %d, %p), vertex buffer = %p\n", index, size, PrintEnum(type), stride, pointer, (glstate->vao->vertex)?glstate->vao->vertex->data:0);)
-    FLUSH_BEGINEND;
+    
     // sanity test
     if(index>=hardext.maxvattrib) {
         errorShim(GL_INVALID_VALUE);
@@ -56,15 +73,31 @@ void APIENTRY_GL4ES gl4es_glVertexAttribIPointer(GLuint index, GLint size, GLenu
         errorShim(GL_INVALID_VALUE);
         return;
     }
-    // TODO: test Type also
+
+    GLsizei effective_stride = stride;
+    if(effective_stride==0) effective_stride=((size==GL_BGRA)?4:size)*gl_sizeof(type);
+
     vertexattrib_t *v = &glstate->vao->vertexattrib[index];
+
+    if (v->size == size &&
+        v->type == type &&
+        v->integer == 1 && // IPointer selalu integer
+        v->stride == effective_stride &&
+        v->pointer == pointer &&
+        v->buffer == glstate->vao->vertex) {
+        
+        noerrorShim();
+        return;
+    }
+
+    FLUSH_BEGINEND;
+
     noerrorShim();
-    if(stride==0) stride=((size==GL_BGRA)?4:size)*gl_sizeof(type);
     v->size = size;
     v->type = type;
     v->normalized = 0;
     v->integer = 1;
-    v->stride = stride;
+    v->stride = effective_stride;
     v->pointer = pointer;
     v->buffer = glstate->vao->vertex;
     if( v->buffer ) {
@@ -75,24 +108,40 @@ void APIENTRY_GL4ES gl4es_glVertexAttribIPointer(GLuint index, GLint size, GLenu
         v->real_pointer = 0;
     }
 }
+
 void APIENTRY_GL4ES gl4es_glEnableVertexAttribArray(GLuint index) {
     DBG(printf("glEnableVertexAttrib(%d)\n", index);)
-    FLUSH_BEGINEND;
+    
     // sanity test
     if(index>=hardext.maxvattrib) {
         errorShim(GL_INVALID_VALUE);
         return;
     }
+
+    if (glstate->vao->vertexattrib[index].enabled == 1) {
+        noerrorShim();
+        return;
+    }
+
+    FLUSH_BEGINEND;
     glstate->vao->vertexattrib[index].enabled = 1;
 }
+
 void APIENTRY_GL4ES gl4es_glDisableVertexAttribArray(GLuint index) {
     DBG(printf("glDisableVertexAttrib(%d)\n", index);)
-    FLUSH_BEGINEND;
+    
     // sanity test
     if(index>=hardext.maxvattrib) {
         errorShim(GL_INVALID_VALUE);
         return;
     }
+
+    if (glstate->vao->vertexattrib[index].enabled == 0) {
+        noerrorShim();
+        return;
+    }
+
+    FLUSH_BEGINEND;
     glstate->vao->vertexattrib[index].enabled = 0;
 }
 
