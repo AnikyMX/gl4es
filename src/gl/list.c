@@ -19,7 +19,7 @@ renderlist_t *alloc_renderlist() {
 
     renderlist_t *list = (renderlist_t *)malloc(sizeof(renderlist_t));
     memset(list, 0, sizeof(renderlist_t));
-    list->cap = 2048;
+    list->cap = DEFAULT_RENDER_LIST_CAPACITY;
     list->matrix_val[0] = list->matrix_val[5] = list->matrix_val[10] = 
                           list->matrix_val[15] = 1.0f;
     list->lightmodelparam = GL_LIGHT_MODEL_AMBIENT;
@@ -771,11 +771,9 @@ void free_renderlist(renderlist_t *list) {
 }
 
 void resize_renderlist(renderlist_t *list) {
-    int step_size = 4096; 
-
     if (list->use_glstate) {
         if (list->len >= glstate->merger_cap) {
-            glstate->merger_cap += step_size;
+            glstate->merger_cap += DEFAULT_RENDER_LIST_CAPACITY*8;
             realloc_merger_sublist(glstate->merger_master, 4*5, glstate->merger_cap);
             realloc_sublist(glstate->merger_secondary, 4, glstate->merger_cap);
             for (int a=2; a<list->maxtex; a++)
@@ -792,7 +790,7 @@ void resize_renderlist(renderlist_t *list) {
         }
     } else {
         if (list->len >= list->cap) {
-            list->cap += step_size;
+            list->cap += DEFAULT_RENDER_LIST_CAPACITY*8;
             realloc_sublist(list->vert, 4, list->cap);
             realloc_sublist(list->normal, 3, list->cap);
             realloc_sublist(list->color, 4, list->cap);

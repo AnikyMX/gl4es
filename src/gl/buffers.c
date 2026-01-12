@@ -10,13 +10,6 @@
 #include "init.h"
 #include "loader.h"
 
-#ifndef GL_MAP_INVALIDATE_BUFFER_BIT
-#define GL_MAP_INVALIDATE_BUFFER_BIT 0x0008
-#endif
-
-typedef void* (*glMapBufferRange_PTR)(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
-typedef GLboolean (*glUnmapBuffer_PTR)(GLenum target);
-
 //#define DEBUG
 #ifdef DEBUG
 #define DBG(a) a
@@ -471,26 +464,12 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-
-    if (hardext.esversion >= 30 && globals4es.usevbo && buff->real_buffer && (access == GL_WRITE_ONLY)) {
-        LOAD_GLES(glMapBufferRange);
-        void* ptr = gles_glMapBufferRange(target, 0, buff->size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-        if (ptr) {
-            buff->access = access;
-            buff->mapped = 2; // MARK AS NATIVE
-            buff->ranged = 0;
-            noerrorShim();
-            return ptr;
-        }
-    }
-
-	buff->access = access;
-	buff->mapped = 1; // MARK AS EMULATED
+	buff->access = access;	// not used
+	buff->mapped = 1;
     buff->ranged = 0;
 	noerrorShim();
-	return buff->data;
+	return buff->data;		// Not nice, should do some copy or something probably
 }
-
 void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
     DBG(printf("glMapNamedBuffer(%u, %s)\n", buffer, PrintEnum(access));)
 
@@ -529,30 +508,17 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 		return GL_FALSE;
     }
 	noerrorShim();
-
-    if (buff->mapped == 2) {
-        LOAD_GLES(glUnmapBuffer);
-        GLboolean ret = gles_glUnmapBuffer(target);
-        buff->mapped = 0;
-        buff->ranged = 0;
-        return ret;
+    if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
+        LOAD_GLES(glBufferSubData);
+        LOAD_GLES(glBindBuffer);
+        bindBuffer(buff->type, buff->real_buffer);
+        gles_glBufferSubData(buff->type, 0, buff->size, buff->data);
     }
-
-    if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped == 1) {
-        if (!buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
-            LOAD_GLES(glBufferSubData);
-            LOAD_GLES(glBindBuffer);
-            bindBuffer(buff->type, buff->real_buffer);
-            gles_glBufferSubData(buff->type, 0, buff->size, buff->data);
-        } else if (buff->ranged && (buff->access&GL_MAP_WRITE_BIT_EXT) && !(buff->access&GL_MAP_FLUSH_EXPLICIT_BIT_EXT)) {
-            // Ranged upload
-            LOAD_GLES(glBufferSubData);
-            LOAD_GLES(glBindBuffer);
-            bindBuffer(buff->type, buff->real_buffer);
-            gles_glBufferSubData(buff->type, buff->offset, buff->length, (void*)((uintptr_t)buff->data+buff->offset));
-        }
+    if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && buff->ranged && (buff->access&GL_MAP_WRITE_BIT_EXT) && !(buff->access&GL_MAP_FLUSH_EXPLICIT_BIT_EXT)) {
+        LOAD_GLES(glBufferSubData);
+        bindBuffer(buff->type, buff->real_buffer);
+        gles_glBufferSubData(buff->type, buff->offset, buff->length, (void*)((uintptr_t)buff->data+buff->offset));
     }
-
     if (buff->mapped) {
 		buff->mapped = 0;
         buff->ranged = 0;
@@ -560,7 +526,6 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 	}
 	return GL_FALSE;
 }
-
 GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
     DBG(printf("glUnmapNamedBuffer(%u)\n", buffer);)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
@@ -661,29 +626,14 @@ void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsi
 	glbuffer_t *buff = getbuffer_buffer(target);
 	if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-		return NULL;
+		return NULL;		// Should generate an error!
     }
     if(buff->mapped) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-
-    if (hardext.esversion >= 30 && globals4es.usevbo && buff->real_buffer && (access & GL_MAP_WRITE_BIT_EXT)) {
-        LOAD_GLES(glMapBufferRange);
-        void* ptr = gles_glMapBufferRange(target, offset, length, access);
-        if (ptr) {
-            buff->access = access;
-            buff->mapped = 2; // MARK AS NATIVE
-            buff->ranged = 1;
-            buff->offset = offset;
-            buff->length = length;
-            noerrorShim();
-            return ptr;
-        }
-    }
-
 	buff->access = access;
-	buff->mapped = 1; // MARK AS EMULATED
+	buff->mapped = 1;
     buff->ranged = 1;
     buff->offset = offset;
     buff->length = length;
@@ -692,7 +642,6 @@ void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsi
     ret += offset;
 	return (void*)ret;
 }
-
 void APIENTRY_GL4ES gl4es_glFlushMappedBufferRange(GLenum target, GLintptr offset, GLsizeiptr length)
 {
     DBG(printf("glFlushMappedBufferRange(%s, %p, %zd)\n", PrintEnum(target), (void*)offset, length);)
