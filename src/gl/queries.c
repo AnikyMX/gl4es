@@ -150,6 +150,12 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
     query->num = 0;
 	query->active = 1;
 	query->start = get_clock() - glstate->queries.start;
+    if(glstate->gleshard->occlusion_query_boolean && (target == GL_ANY_SAMPLES_PASSED || target == GL_ANY_SAMPLES_PASSED_CONSERVATIVE)) {
+        LOAD_GLES_OES(glBeginQueryEXT);
+        if(gles_glBeginQueryEXT) {
+            gles_glBeginQueryEXT(target, id);
+        }
+    }
     noerrorShim();
 }
 
@@ -174,6 +180,12 @@ void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
 	}
     query->active = 0;
 	query->start = (get_clock() - glstate->queries.start) - query->start;
+    if(glstate->gleshard->occlusion_query_boolean && (target == GL_ANY_SAMPLES_PASSED || target == GL_ANY_SAMPLES_PASSED_CONSERVATIVE)) {
+        LOAD_GLES_OES(glEndQueryEXT);
+        if(gles_glEndQueryEXT) {
+            gles_glEndQueryEXT(target);
+        }
+    }
 	noerrorShim();
 }
 
@@ -233,10 +245,24 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
 
     switch (pname) {
     	case GL_QUERY_RESULT_AVAILABLE:
-    		*params = GL_TRUE;//GL_FALSE;
+            if(glstate->gleshard->occlusion_query_boolean && (query->target == GL_ANY_SAMPLES_PASSED || query->target == GL_ANY_SAMPLES_PASSED_CONSERVATIVE)) {
+                LOAD_GLES_OES(glGetQueryObjectuivEXT);
+                if(gles_glGetQueryObjectuivEXT) {
+                    gles_glGetQueryObjectuivEXT(id, GL_QUERY_RESULT_AVAILABLE, params);
+                    break;
+                }
+            }
+    		*params = GL_TRUE;
     		break;
 		case GL_QUERY_RESULT_NO_WAIT:
     	case GL_QUERY_RESULT:
+            if(glstate->gleshard->occlusion_query_boolean && (query->target == GL_ANY_SAMPLES_PASSED || query->target == GL_ANY_SAMPLES_PASSED_CONSERVATIVE)) {
+                LOAD_GLES_OES(glGetQueryObjectuivEXT);
+                if(gles_glGetQueryObjectuivEXT) {
+                    gles_glGetQueryObjectuivEXT(id, GL_QUERY_RESULT, params);
+                    break;
+                }
+            }
     		*params = (query->target==GL_TIME_ELAPSED)?query->start:query->num;
     		break;
     	default:

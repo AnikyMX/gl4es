@@ -297,10 +297,16 @@ void APIENTRY_GL4ES gl4es_glBufferSubData(GLenum target, GLintptr offset, GLsize
     }
 
     if((target==GL_ARRAY_BUFFER || target==GL_ELEMENT_ARRAY_BUFFER) && buff->real_buffer) {
-        LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(target, buff->real_buffer);
-        gles_glBufferSubData(target, offset, size, data);
+
+        if (offset == 0 && size == buff->size) {
+            LOAD_GLES(glBufferData);
+            gles_glBufferData(target, size, data, buff->usage);
+        } else {
+            LOAD_GLES(glBufferSubData);
+            gles_glBufferSubData(target, offset, size, data);
+        }
     }
         
     memcpy((char*)buff->data + offset, data, size);
@@ -508,11 +514,11 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
 		return GL_FALSE;
     }
 	noerrorShim();
-    if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
-        LOAD_GLES(glBufferSubData);
+        if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
+        LOAD_GLES(glBufferData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(buff->type, buff->real_buffer);
-        gles_glBufferSubData(buff->type, 0, buff->size, buff->data);
+        gles_glBufferData(buff->type, buff->size, buff->data, buff->usage);
     }
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && buff->ranged && (buff->access&GL_MAP_WRITE_BIT_EXT) && !(buff->access&GL_MAP_FLUSH_EXPLICIT_BIT_EXT)) {
         LOAD_GLES(glBufferSubData);
