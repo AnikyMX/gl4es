@@ -137,6 +137,7 @@ void APIENTRY_GL4ES gl4es_glLightfv(GLenum light, GLenum pname, const GLfloat* p
         errorShim(GL_INVALID_ENUM);
         return;
     }
+
     ERROR_IN_BEGIN
     if(glstate->list.active)
         if (glstate->list.compiling) {
@@ -148,6 +149,10 @@ void APIENTRY_GL4ES gl4es_glLightfv(GLenum light, GLenum pname, const GLfloat* p
 
     GLfloat tmp[4];
     noerrorShim();
+    
+    // Helper pointer for matrix optimizations
+    GLfloat *m; 
+
     switch(pname) {
         case GL_AMBIENT:
             if(memcmp(glstate->light.lights[nl].ambient, params, 4*sizeof(GLfloat))==0)
@@ -164,11 +169,20 @@ void APIENTRY_GL4ES gl4es_glLightfv(GLenum light, GLenum pname, const GLfloat* p
                 return;
             memcpy(glstate->light.lights[nl].specular, params, 4*sizeof(GLfloat));
             break;
+            
         case GL_POSITION:
-            vector_matrix(params, getMVMat(), tmp);
+            // Calculation: V_out = Matrix * V_in
+            m = getMVMat();
+
+            tmp[0] = m[0]*params[0] + m[4]*params[1] + m[8]*params[2] + m[12]*params[3];
+            tmp[1] = m[1]*params[0] + m[5]*params[1] + m[9]*params[2] + m[13]*params[3];
+            tmp[2] = m[2]*params[0] + m[6]*params[1] + m[10]*params[2] + m[14]*params[3];
+            tmp[3] = m[3]*params[0] + m[7]*params[1] + m[11]*params[2] + m[15]*params[3];
+
             if(memcmp(glstate->light.lights[nl].position, tmp, 4*sizeof(GLfloat))==0)
                 return;
             memcpy(glstate->light.lights[nl].position, tmp, 4*sizeof(GLfloat));
+            
             if(glstate->fpe_state) {
                 int dir = (tmp[3]!=0.f);
                 if (dir) {
@@ -178,12 +192,20 @@ void APIENTRY_GL4ES gl4es_glLightfv(GLenum light, GLenum pname, const GLfloat* p
                 }
             }
             break;
+            
         case GL_SPOT_DIRECTION:
-            vector3_matrix4(params,getMVMat(), tmp);
+            // Direction vectors ignore translation (rows 12,13,14), only Rotation/Scale applies.
+            m = getMVMat();
+
+            tmp[0] = m[0]*params[0] + m[4]*params[1] + m[8]*params[2];
+            tmp[1] = m[1]*params[0] + m[5]*params[1] + m[9]*params[2];
+            tmp[2] = m[2]*params[0] + m[6]*params[1] + m[10]*params[2];
+            
             if(memcmp(glstate->light.lights[nl].spotDirection, tmp, 3*sizeof(GLfloat))==0)
                 return;
             memcpy(glstate->light.lights[nl].spotDirection, tmp, 3*sizeof(GLfloat));
             break;
+            
         case GL_SPOT_EXPONENT:
             if(params[0]<0 || params[0]>128) {
                 errorShim(GL_INVALID_VALUE);
