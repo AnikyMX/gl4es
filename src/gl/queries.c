@@ -12,6 +12,18 @@
 #include "gl4es.h"
 #include "glstate.h"
 #include "loader.h"
+
+#ifndef glGenQueries_PTR
+typedef void (APIENTRY_GLES *glGenQueries_PTR)(GLsizei n, GLuint * ids);
+typedef void (APIENTRY_GLES *glDeleteQueries_PTR)(GLsizei n, const GLuint * ids);
+typedef void (APIENTRY_GLES *glIsQuery_PTR)(GLuint id);
+typedef void (APIENTRY_GLES *glBeginQuery_PTR)(GLenum target, GLuint id);
+typedef void (APIENTRY_GLES *glEndQuery_PTR)(GLenum target);
+typedef void (APIENTRY_GLES *glGetQueryiv_PTR)(GLenum target, GLenum pname, GLint * params);
+typedef void (APIENTRY_GLES *glGetQueryObjectiv_PTR)(GLuint id, GLenum pname, GLint * params);
+typedef void (APIENTRY_GLES *glGetQueryObjectuiv_PTR)(GLuint id, GLenum pname, GLuint * params);
+#endif
+
 #ifdef _WIN32
 #ifdef _WINBASE_
 #define GSM_CAST(c) ((LPFILETIME)c)
