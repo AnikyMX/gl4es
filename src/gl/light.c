@@ -184,8 +184,9 @@ void APIENTRY_GL4ES gl4es_glLightfv(GLenum light, GLenum pname, const GLfloat* p
             memcpy(glstate->light.lights[nl].position, tmp, 4*sizeof(GLfloat));
             
             if(glstate->fpe_state) {
-                int dir = (tmp[3]!=0.f);
-                if (dir) {
+                int is_directional = (tmp[3] == 0.f); 
+                
+                if (is_directional) {
                     glstate->fpe_state->light_direction |= (1<<nl);
                 } else {
                     glstate->fpe_state->light_direction &= ~(1<<nl);
