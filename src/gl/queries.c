@@ -66,8 +66,13 @@ void del_querie(GLuint querie) {
         s = kh_value(list, k);
         kh_del(queries, list, k);
     }
-    if(s)
+    if(s) {
+        if(s->real_id) {
+            LOAD_GLES(glDeleteQueries);
+            gles_glDeleteQueries(1, &s->real_id);
+        }
         free(s);
+    }
 }
 
 unsigned long long get_clock() {
@@ -123,58 +128,46 @@ void APIENTRY_GL4ES gl4es_glDeleteQueries(GLsizei n, const GLuint* ids) {
 void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
     FLUSH_BEGINEND;
     glquery_t *query = find_query(id);
-	if(!query) {
-		khint_t k;
-		int ret;
-		khash_t(queries) *list = glstate->queries.querylist;
+    if(!query) {
+        khint_t k;
+        int ret;
+        khash_t(queries) *list = glstate->queries.querylist;
         k = kh_put(queries, list, id, &ret);
         query = kh_value(list, k) = calloc(1, sizeof(glquery_t));
-	}
-	if(query->active || find_query_target(target)) {
-		errorShim(GL_INVALID_OPERATION);
-		return;
-	}
-	switch(target) {
-		case GL_SAMPLES_PASSED:
-		case GL_ANY_SAMPLES_PASSED:
-		case GL_ANY_SAMPLES_PASSED_CONSERVATIVE:
-		case GL_PRIMITIVES_GENERATED:
-		case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
-		case GL_TIME_ELAPSED:
-			break;
-		default:
-			errorShim(GL_INVALID_ENUM);
-			return;
-	}
+        query->id = id;
+    }
+    if(query->active || find_query_target(target)) {
+        errorShim(GL_INVALID_OPERATION);
+        return;
+    }
+
+    if(!query->real_id) {
+        LOAD_GLES(glGenQueries);
+        gles_glGenQueries(1, &query->real_id);
+    }
+
+    LOAD_GLES(glBeginQuery);
+    gles_glBeginQuery(target, query->real_id);
+
     query->target = target;
     query->num = 0;
-	query->active = 1;
-	query->start = get_clock() - glstate->queries.start;
+    query->active = 1;
     noerrorShim();
 }
 
 void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
     FLUSH_BEGINEND;
-	glquery_t *query = find_query_target(target);
-	if(!query) {
-		errorShim(GL_INVALID_OPERATION);
-		return;
-	}
-	switch(target) {
-		case GL_SAMPLES_PASSED:
-		case GL_ANY_SAMPLES_PASSED:
-		case GL_ANY_SAMPLES_PASSED_CONSERVATIVE:
-		case GL_PRIMITIVES_GENERATED:
-		case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
-		case GL_TIME_ELAPSED:
-			break;
-		default:
-			errorShim(GL_INVALID_ENUM);
-			return;
-	}
+    glquery_t *query = find_query_target(target);
+    if(!query) {
+        errorShim(GL_INVALID_OPERATION);
+        return;
+    }
+
+    LOAD_GLES(glEndQuery);
+    gles_glEndQuery(target);
+
     query->active = 0;
-	query->start = (get_clock() - glstate->queries.start) - query->start;
-	noerrorShim();
+    noerrorShim();
 }
 
 void APIENTRY_GL4ES gl4es_glGetQueryiv(GLenum target, GLenum pname, GLint* params) {
@@ -224,24 +217,28 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* par
 
 void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* params) {
     FLUSH_BEGINEND;
-		
-	glquery_t *query = find_query(id);
-	if(!query) {
-		errorShim(GL_INVALID_OPERATION);
-		return;
-	}
+    glquery_t *query = find_query(id);
+    if(!query) {
+        errorShim(GL_INVALID_OPERATION);
+        return;
+    }
 
-    switch (pname) {
-    	case GL_QUERY_RESULT_AVAILABLE:
-    		*params = GL_TRUE;//GL_FALSE;
-    		break;
-		case GL_QUERY_RESULT_NO_WAIT:
-    	case GL_QUERY_RESULT:
-    		*params = (query->target==GL_TIME_ELAPSED)?query->start:query->num;
-    		break;
-    	default:
-    		errorShim(GL_INVALID_ENUM);
-			return;
+    if(query->real_id) {
+        LOAD_GLES(glGetQueryObjectuiv);
+
+        if (pname == GL_QUERY_RESULT) {
+            GLuint available = 0;
+            gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT_AVAILABLE, &available);
+            if (available == GL_FALSE) {
+                *params = 0; 
+                noerrorShim();
+                return;
+            }
+        }
+
+        gles_glGetQueryObjectuiv(query->real_id, pname, params);
+    } else {
+        *params = 0;
     }
     noerrorShim();
 }
