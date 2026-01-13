@@ -353,7 +353,6 @@ typedef struct {
 
 typedef struct {
     GLuint id;
-    GLuint real_id;
     GLenum target;
     int num;
     int active;

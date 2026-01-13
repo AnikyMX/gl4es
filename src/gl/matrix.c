@@ -245,11 +245,11 @@ DBG(printf("glLoadMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1],
 
 void APIENTRY_GL4ES gl4es_glMultMatrixf(const GLfloat * m) {
 DBG(printf("glMultMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1], m[2], m[3], m[4], m[5], m[6], glstate->list.active);)
-	if (glstate->list.active) {
+
+    if (glstate->list.active) {
 		if(glstate->list.pending) gl4es_flush();
 		else {
 			if(glstate->list.active->stage == STAGE_MATRIX) {
-				// multiply the matrix mith the current one....
 				matrix_mul(glstate->list.active->matrix_val, m, glstate->list.active->matrix_val);
 				return;
 			}
@@ -259,8 +259,30 @@ DBG(printf("glMultMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1],
 			return;
 		}
 	}
+    
 	GLfloat *current_mat = update_current_mat();
-	matrix_mul(current_mat, m, current_mat);
+    GLfloat tmp[16]; // Temporary buffer for result
+    
+    // Column-Major Multiplication Unrolled
+    for(int i=0; i<4; i++) {
+        // Load scalar multipliers from input matrix 'm' (Column i)
+        GLfloat m0 = m[i*4+0];
+        GLfloat m1 = m[i*4+1];
+        GLfloat m2 = m[i*4+2];
+        GLfloat m3 = m[i*4+3];
+
+        // Vector multiply-add with current_mat columns
+        // This pattern allows FMLA (Fused Multiply-Add) optimization
+        tmp[i*4+0] = current_mat[0]*m0 + current_mat[4]*m1 + current_mat[8]*m2 + current_mat[12]*m3;
+        tmp[i*4+1] = current_mat[1]*m0 + current_mat[5]*m1 + current_mat[9]*m2 + current_mat[13]*m3;
+        tmp[i*4+2] = current_mat[2]*m0 + current_mat[6]*m1 + current_mat[10]*m2 + current_mat[14]*m3;
+        tmp[i*4+3] = current_mat[3]*m0 + current_mat[7]*m1 + current_mat[11]*m2 + current_mat[15]*m3;
+    }
+    
+    // Copy result back to state
+    memcpy(current_mat, tmp, 16*sizeof(GLfloat));
+
+    // Update Dirty Flags & Identity Status
 	const int id = update_current_identity(0);
 	if(glstate->matrix_mode==GL_MODELVIEW)
 		glstate->normal_matrix_dirty = glstate->inv_mv_matrix_dirty = 1;
@@ -268,11 +290,13 @@ DBG(printf("glMultMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1],
 		glstate->mvp_matrix_dirty = 1;
 	else if((glstate->matrix_mode==GL_TEXTURE) && glstate->fpe_state)
 		set_fpe_textureidentity();
+        
 	DBG(printf(" => (%f, %f, %f, %f, %f, %f, %f...)\n", current_mat[0], current_mat[1], current_mat[2], current_mat[3], current_mat[4], current_mat[5], current_mat[6]);)
-	if(send_to_hardware()) {
+	
+    if(send_to_hardware()) {
 		LOAD_GLES(glLoadMatrixf);
 		LOAD_GLES(glLoadIdentity);
-		if(id) gles_glLoadIdentity();	// in case the driver as some special optimisations
+		if(id) gles_glLoadIdentity();
 		else gles_glLoadMatrixf(current_mat);
 	}
 }
@@ -304,25 +328,76 @@ DBG(printf("glLoadIdentity(), list=%p\n", glstate->list.active);)
 
 void APIENTRY_GL4ES gl4es_glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
 DBG(printf("glTranslatef(%f, %f, %f), list=%p\n", x, y, z, glstate->list.active);)
-	// create a translation matrix than multiply it...
-	GLfloat tmp[16];
-	set_identity(tmp);
-	tmp[12+0] = x;
-	tmp[12+1] = y;
-	tmp[12+2] = z;
-	gl4es_glMultMatrixf(tmp);
+    // Bypass matrix creation and multiplication overhead
+    
+	if (glstate->list.active) {
+        // Keep original logic for Batching/Display Lists to prevent crash
+		GLfloat tmp[16];
+		set_identity(tmp);
+		tmp[12+0] = x;
+		tmp[12+1] = y;
+		tmp[12+2] = z;
+		gl4es_glMultMatrixf(tmp);
+        return;
+	}
+
+    // Direct Math Implementation
+    GLfloat *m = update_current_mat();
+    // Column 4 (Index 12, 13, 14, 15) is the translation column
+    // M_new = M_old * Translation
+    m[12] = m[0]*x + m[4]*y + m[8]*z  + m[12];
+    m[13] = m[1]*x + m[5]*y + m[9]*z  + m[13];
+    m[14] = m[2]*x + m[6]*y + m[10]*z + m[14];
+    m[15] = m[3]*x + m[7]*y + m[11]*z + m[15];
+
+    // Mark matrix as dirty for inverse/normal calculations
+	if(glstate->matrix_mode==GL_MODELVIEW)
+		glstate->normal_matrix_dirty = glstate->inv_mv_matrix_dirty = 1;
+	if(glstate->matrix_mode==GL_MODELVIEW || glstate->matrix_mode==GL_PROJECTION)
+		glstate->mvp_matrix_dirty = 1;
+    
+    // Check if we need to send to hardware (Shader Uniform)
+    if(send_to_hardware()) {
+		LOAD_GLES(glLoadMatrixf);
+		gles_glLoadMatrixf(m);
+	}
 }
 
 void APIENTRY_GL4ES gl4es_glScalef(GLfloat x, GLfloat y, GLfloat z) {
 DBG(printf("glScalef(%f, %f, %f), list=%p\n", x, y, z, glstate->list.active);)
-	// create a scale matrix than multiply it...
-	GLfloat tmp[16];
-	memset(tmp, 0, 16*sizeof(GLfloat));
-	tmp[0+0] = x;
-	tmp[1+4] = y;
-	tmp[2+8] = z;
-	tmp[3+12] = 1.0f;
-	gl4es_glMultMatrixf(tmp);
+
+	if (glstate->list.active) {
+        // Keep original logic for Batching/Display Lists
+		GLfloat tmp[16];
+		memset(tmp, 0, 16*sizeof(GLfloat));
+		tmp[0+0] = x;
+		tmp[1+4] = y;
+		tmp[2+8] = z;
+		tmp[3+12] = 1.0f;
+		gl4es_glMultMatrixf(tmp);
+        return;
+	}
+
+    // Direct Math Implementation
+    GLfloat *m = update_current_mat();
+    // Scale X (Column 0)
+    m[0] *= x; m[1] *= x; m[2] *= x; m[3] *= x;
+    // Scale Y (Column 1)
+    m[4] *= y; m[5] *= y; m[6] *= y; m[7] *= y;
+    // Scale Z (Column 2)
+    m[8] *= z; m[9] *= z; m[10]*= z; m[11]*= z;
+
+    // Mark matrix as dirty
+	if(glstate->matrix_mode==GL_MODELVIEW)
+		glstate->normal_matrix_dirty = glstate->inv_mv_matrix_dirty = 1;
+	if(glstate->matrix_mode==GL_MODELVIEW || glstate->matrix_mode==GL_PROJECTION)
+		glstate->mvp_matrix_dirty = 1;
+
+    // Send to hardware if needed
+    if(send_to_hardware()) {
+		LOAD_GLES(glLoadMatrixf);
+		gles_glLoadMatrixf(m);
+	}
 }
 
 void APIENTRY_GL4ES gl4es_glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
