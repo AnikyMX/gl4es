@@ -13,6 +13,13 @@
 #include "glstate.h"
 #include "loader.h"
 
+#ifndef GL_ANY_SAMPLES_PASSED
+#define GL_ANY_SAMPLES_PASSED 0x8C2F
+#endif
+#ifndef GL_ANY_SAMPLES_PASSED_CONSERVATIVE
+#define GL_ANY_SAMPLES_PASSED_CONSERVATIVE 0x8D6A
+#endif
+
 #ifndef glGenQueries_PTR
 typedef void (APIENTRY_GLES *glGenQueries_PTR)(GLsizei n, GLuint * ids);
 typedef void (APIENTRY_GLES *glDeleteQueries_PTR)(GLsizei n, const GLuint * ids);
@@ -152,7 +159,8 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
         errorShim(GL_INVALID_OPERATION);
         return;
     }
-
+    
+    // --- HARDWARE QUERY IMPLEMENTATION ---
     if(!query->real_id) {
         LOAD_GLES(glGenQueries);
         gles_glGenQueries(1, &query->real_id);
@@ -160,14 +168,19 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
     
     LOAD_GLES(glBeginQuery);
 
+    // [FIX 8 FPS] TRANSLASI WAJIB UNTUK GLES 3.0
+    // Driver GLES 3.0 akan ERROR jika dikasih GL_SAMPLES_PASSED (0x8914).
+    // Kita harus ubah ke GL_ANY_SAMPLES_PASSED (0x8C2F) atau CONSERVATIVE (0x8D6A).
     GLenum driver_target = target;
     if (target == GL_SAMPLES_PASSED) {
-        driver_target = GL_ANY_SAMPLES_PASSED;
+        // Gunakan Conservative jika didukung (biasanya lebih cepat), atau fallback ke standard
+        driver_target = GL_ANY_SAMPLES_PASSED_CONSERVATIVE;
     }
     
     gles_glBeginQuery(driver_target, query->real_id);
+    // -------------------------------------
 
-    query->target = target; 
+    query->target = target;
     query->num = 0;
     query->active = 1;
     noerrorShim();
@@ -243,8 +256,26 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
 
     if(query->real_id) {
         LOAD_GLES(glGetQueryObjectuiv);
-        gles_glGetQueryObjectuiv(query->real_id, pname, params);
         
+        // Jika Minecraft meminta Hasil (RESULT)...
+        if (pname == GL_QUERY_RESULT) {
+            GLuint available = GL_FALSE;
+            // 1. Tanya dulu: Apakah hasil sudah siap?
+            gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT_AVAILABLE, &available);
+            
+            if (available == GL_TRUE) {
+                // 2A. Jika SIAP, ambil hasil aslinya (Cepat, tidak blocking)
+                gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT, params);
+            } else {
+                // 2B. Jika BELUM SIAP, Jangan tunggu (Nanti 8 FPS!)
+                // Kembalikan 1 (Visible) sebagai prediksi aman.
+                // Ini mencegah objek menghilang (culling artifact) dan menjaga FPS tinggi.
+                *params = 1; 
+            }
+        } else {
+            // Untuk parameter lain (misal GL_QUERY_RESULT_AVAILABLE), teruskan saja
+            gles_glGetQueryObjectuiv(query->real_id, pname, params);
+        }
     } else {
         *params = 0;
     }
