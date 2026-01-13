@@ -12,8 +12,7 @@
 #include "glstate.h"
 #include "loader.h"
 
-// --- [FIX BUILD] MANUAL TYPEDEFS (WAJIB ADA) ---
-// Ini adalah "kamus" agar compiler mengenali fungsi GLES saat LOAD_GLES dipanggil
+// --- [FIX BUILD] KAMUS DEFINISI (WAJIB ADA) ---
 #ifndef glGenQueries_PTR
 typedef void (APIENTRY_GLES *glGenQueries_PTR)(GLsizei n, GLuint * ids);
 typedef void (APIENTRY_GLES *glDeleteQueries_PTR)(GLsizei n, const GLuint * ids);
@@ -23,8 +22,9 @@ typedef void (APIENTRY_GLES *glEndQuery_PTR)(GLenum target);
 typedef void (APIENTRY_GLES *glGetQueryiv_PTR)(GLenum target, GLenum pname, GLint * params);
 typedef void (APIENTRY_GLES *glGetQueryObjectiv_PTR)(GLuint id, GLenum pname, GLint * params);
 typedef void (APIENTRY_GLES *glGetQueryObjectuiv_PTR)(GLuint id, GLenum pname, GLuint * params);
+typedef void (APIENTRY_GLES *glFlush_PTR)(); // Kita butuh ini!
 #endif
-// -----------------------------------------------------
+// ----------------------------------------------
 
 #ifdef _WIN32
 #ifdef _WINBASE_
@@ -40,12 +40,9 @@ void __stdcall GetSystemTimeAsFileTime(unsigned __int64*);
 #ifndef GL_ANY_SAMPLES_PASSED
 #define GL_ANY_SAMPLES_PASSED 0x8C2F
 #endif
-#ifndef GL_ANY_SAMPLES_PASSED_CONSERVATIVE
-#define GL_ANY_SAMPLES_PASSED_CONSERVATIVE 0x8D6A
-#endif
 // -------------------------
 
-// --- GET_CLOCK FUNCTION ---
+// --- [FIX LINKER] FUNGSI GET_CLOCK ---
 unsigned long long get_clock() {
 	unsigned long long now;
 	#ifdef _WIN32
@@ -75,7 +72,6 @@ static glquery_t* find_query(GLuint querie) {
     return NULL;
 }
 
-// Helper untuk mencari query berdasarkan target
 static glquery_t* find_query_target(GLenum target) {
     khash_t(queries) *list = glstate->queries.querylist;
 	glquery_t *q;
@@ -88,7 +84,7 @@ static glquery_t* find_query_target(GLenum target) {
 
 // 1. GEN QUERIES
 void APIENTRY_GL4ES gl4es_glGenQueries(GLsizei n, GLuint * ids) {
-    // FLUSH REMOVED
+    // NO FLUSH (Aman)
     if (n<1) return;
     for (int i=0; i<n; i++) {
         ids[i] = ++glstate->queries.last_query;
@@ -96,10 +92,7 @@ void APIENTRY_GL4ES gl4es_glGenQueries(GLsizei n, GLuint * ids) {
         khint_t k = kh_put(queries, glstate->queries.querylist, ids[i], &ret);
         glquery_t *query = kh_value(glstate->queries.querylist, k) = calloc(1, sizeof(glquery_t));
         query->id = ids[i];
-        
-        // [OPTIMASI CACHE]
-        // Set nilai awal 'num' jadi 1 (Visible) untuk mencegah flicker awal
-        query->num = 1; 
+        query->num = 1; // Default Visible
     }
     noerrorShim();
 }
@@ -112,12 +105,11 @@ GLboolean APIENTRY_GL4ES gl4es_glIsQuery(GLuint id) {
 
 // 3. DELETE QUERIES
 void APIENTRY_GL4ES gl4es_glDeleteQueries(GLsizei n, const GLuint* ids) {
-    // FLUSH REMOVED
+    // NO FLUSH (Aman)
     for(int i=0; i<n; ++i) {
         khint_t k = kh_get(queries, glstate->queries.querylist, ids[i]);
         if (k != kh_end(glstate->queries.querylist)){
             glquery_t *s = kh_value(glstate->queries.querylist, k);
-            // Hapus di hardware juga
             if(s->real_id) {
                 LOAD_GLES(glDeleteQueries);
                 gles_glDeleteQueries(1, &s->real_id);
@@ -130,7 +122,8 @@ void APIENTRY_GL4ES gl4es_glDeleteQueries(GLsizei n, const GLuint* ids) {
 
 // 4. BEGIN QUERY
 void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
-    // FLUSH REMOVED
+    // NO FLUSH (Kita hapus rem tangan di sini)
+    
     glquery_t *query = find_query(id);
     if(!query) {
         khint_t k; int ret;
@@ -145,7 +138,7 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
         return;
     }
     
-    // --- HARDWARE INIT ---
+    // Init Hardware
     if(!query->real_id) {
         LOAD_GLES(glGenQueries);
         gles_glGenQueries(1, &query->real_id);
@@ -153,24 +146,22 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
     
     LOAD_GLES(glBeginQuery);
     
-    // [FIX ENUM] Terjemahkan GL_SAMPLES_PASSED -> GL_ANY_SAMPLES_PASSED
+    // Translasi ke Boolean (Support PowerVR)
     GLenum driver_target = target;
     if (target == GL_SAMPLES_PASSED) {
         driver_target = GL_ANY_SAMPLES_PASSED;
     }
     gles_glBeginQuery(driver_target, query->real_id);
-    // ---------------------
 
     query->target = target;
     query->active = 1;
-    // PENTING: Jangan reset query->num jadi 0 di sini. Kita pakai nilai lama sebagai cache.
-    
     noerrorShim();
 }
 
-// 5. END QUERY
+// 5. END QUERY (INILAH KUNCINYA!)
 void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
-    // FLUSH REMOVED
+    // NO FLUSH_BEGINEND (Software flush dimatikan)
+    
     glquery_t *query = find_query_target(target);
     if(!query) {
         errorShim(GL_INVALID_OPERATION);
@@ -178,21 +169,26 @@ void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
     }
     
     LOAD_GLES(glEndQuery);
-    
-    // [FIX ENUM]
     GLenum driver_target = target;
     if (target == GL_SAMPLES_PASSED) {
         driver_target = GL_ANY_SAMPLES_PASSED;
     }
     gles_glEndQuery(driver_target);
     
+    // [OPTIMASI POWERVR]
+    // Kita "Dorong" perintah ke GPU supaya urutannya benar (Tembok dulu -> Baru Query).
+    // Tapi kita pakai glFlush() (Fire & Forget), BUKAN glFinish() (Tunggu).
+    // Ini memperbaiki Culling tanpa bikin Lag.
+    LOAD_GLES(glFlush);
+    gles_glFlush(); 
+    
     query->active = 0;
     noerrorShim();
 }
 
-// 6. GET QUERY OBJECT (LOGIKA UTAMA)
+// 6. GET QUERY OBJECT (ASYNC HISTORY)
 void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* params) {
-    // FLUSH REMOVED
+    // NO FLUSH
     
     glquery_t *query = find_query(id);
     if(!query) {
@@ -200,7 +196,7 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
         return;
     }
 
-    *params = 0;
+    *params = query->num; // Default safety
 
     if(query->real_id) {
         LOAD_GLES(glGetQueryObjectuiv);
@@ -208,31 +204,30 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
         if (pname == GL_QUERY_RESULT) {
             GLuint available = GL_FALSE;
             
-            // 1. Cek dulu, apakah GPU sudah selesai?
+            // Tanya GPU: "Sudah siap?"
             gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT_AVAILABLE, &available);
             
             if (available == GL_TRUE) {
-                // 2A. Jika SIAP: Ambil hasil asli & Update Cache
+                // SIAP: Ambil hasil
                 GLuint res = 0;
                 gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT, &res);
                 query->num = res; 
                 *params = res;
             } else {
-                // 2B. Jika BELUM SIAP (Stalling):
-                // JANGAN TUNGGU. Kembalikan hasil TERAKHIR (Cache).
-                // Ini membuat frame rate tetap tinggi.
+                // BELUM SIAP: Jangan tunggu!
+                // Kembalikan hasil terakhir (History).
+                // Karena kita sudah pakai glFlush di EndQuery, 
+                // kemungkinan "available" jadi TRUE akan lebih cepat di frame berikutnya.
                 *params = query->num; 
             }
         } else {
             gles_glGetQueryObjectuiv(query->real_id, pname, params);
         }
-    } else {
-        *params = query->num;
     }
     noerrorShim();
 }
 
-// Wrappers Lainnya
+// WRAPPERS LAIN
 void APIENTRY_GL4ES gl4es_glGetQueryiv(GLenum target, GLenum pname, GLint* params) {
     *params = 0;
 }
