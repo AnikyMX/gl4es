@@ -157,11 +157,17 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
         LOAD_GLES(glGenQueries);
         gles_glGenQueries(1, &query->real_id);
     }
-
+    
     LOAD_GLES(glBeginQuery);
-    gles_glBeginQuery(target, query->real_id);
 
-    query->target = target;
+    GLenum driver_target = target;
+    if (target == GL_SAMPLES_PASSED) {
+        driver_target = GL_ANY_SAMPLES_PASSED;
+    }
+    
+    gles_glBeginQuery(driver_target, query->real_id);
+
+    query->target = target; 
     query->num = 0;
     query->active = 1;
     noerrorShim();
@@ -237,18 +243,8 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
 
     if(query->real_id) {
         LOAD_GLES(glGetQueryObjectuiv);
-
-        if (pname == GL_QUERY_RESULT) {
-            GLuint available = 0;
-            gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT_AVAILABLE, &available);
-            if (available == GL_FALSE) {
-                *params = 0; 
-                noerrorShim();
-                return;
-            }
-        }
-
         gles_glGetQueryObjectuiv(query->real_id, pname, params);
+        
     } else {
         *params = 0;
     }
