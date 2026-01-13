@@ -111,7 +111,7 @@ unsigned long long get_clock() {
 }
 
 void APIENTRY_GL4ES gl4es_glGenQueries(GLsizei n, GLuint * ids) {
-    FLUSH_BEGINEND;
+    //FLUSH_BEGINEND;
 	noerrorShim();
     if (n<1) {
 		errorShim(GL_INVALID_VALUE);
@@ -124,7 +124,7 @@ void APIENTRY_GL4ES gl4es_glGenQueries(GLsizei n, GLuint * ids) {
 
 GLboolean APIENTRY_GL4ES gl4es_glIsQuery(GLuint id) {
 	if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
-	FLUSH_BEGINEND;
+	//FLUSH_BEGINEND;
 	glquery_t *querie = find_query(id);
 	if(querie)
 		return GL_TRUE;
@@ -132,7 +132,7 @@ GLboolean APIENTRY_GL4ES gl4es_glIsQuery(GLuint id) {
 }
 
 void APIENTRY_GL4ES gl4es_glDeleteQueries(GLsizei n, const GLuint* ids) {
-    FLUSH_BEGINEND;
+    //FLUSH_BEGINEND;
     if(n<0) {
         errorShim(GL_INVALID_VALUE);
         return;
@@ -145,7 +145,7 @@ void APIENTRY_GL4ES gl4es_glDeleteQueries(GLsizei n, const GLuint* ids) {
 }
 
 void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
-    FLUSH_BEGINEND;
+    //FLUSH_BEGINEND;
     glquery_t *query = find_query(id);
     if(!query) {
         khint_t k;
@@ -187,7 +187,7 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
 }
 
 void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
-    FLUSH_BEGINEND;
+    //FLUSH_BEGINEND;
     glquery_t *query = find_query_target(target);
     if(!query) {
         errorShim(GL_INVALID_OPERATION);
@@ -202,7 +202,7 @@ void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
 }
 
 void APIENTRY_GL4ES gl4es_glGetQueryiv(GLenum target, GLenum pname, GLint* params) {
-    FLUSH_BEGINEND;
+    //FLUSH_BEGINEND;
 
 	glquery_t *q = find_query_target(target);
 	if(!q) {
@@ -247,7 +247,7 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* par
 }
 
 void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* params) {
-    FLUSH_BEGINEND;
+    //FLUSH_BEGINEND;
     glquery_t *query = find_query(id);
     if(!query) {
         errorShim(GL_INVALID_OPERATION);
