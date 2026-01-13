@@ -12,7 +12,8 @@
 #include "glstate.h"
 #include "loader.h"
 
-// --- [FIX BUILD] KAMUS DEFINISI (WAJIB ADA) ---
+// --- [FIX BUILD] KAMUS DEFINISI (VERSI REVISI) ---
+// Kita hapus glFlush_PTR dari sini karena sudah ada di gles.h
 #ifndef glGenQueries_PTR
 typedef void (APIENTRY_GLES *glGenQueries_PTR)(GLsizei n, GLuint * ids);
 typedef void (APIENTRY_GLES *glDeleteQueries_PTR)(GLsizei n, const GLuint * ids);
@@ -22,9 +23,8 @@ typedef void (APIENTRY_GLES *glEndQuery_PTR)(GLenum target);
 typedef void (APIENTRY_GLES *glGetQueryiv_PTR)(GLenum target, GLenum pname, GLint * params);
 typedef void (APIENTRY_GLES *glGetQueryObjectiv_PTR)(GLuint id, GLenum pname, GLint * params);
 typedef void (APIENTRY_GLES *glGetQueryObjectuiv_PTR)(GLuint id, GLenum pname, GLuint * params);
-typedef void (APIENTRY_GLES *glFlush_PTR)(); // Kita butuh ini!
 #endif
-// ----------------------------------------------
+// --------------------------------------------------
 
 #ifdef _WIN32
 #ifdef _WINBASE_
@@ -176,9 +176,8 @@ void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
     gles_glEndQuery(driver_target);
     
     // [OPTIMASI POWERVR]
-    // Kita "Dorong" perintah ke GPU supaya urutannya benar (Tembok dulu -> Baru Query).
-    // Tapi kita pakai glFlush() (Fire & Forget), BUKAN glFinish() (Tunggu).
-    // Ini memperbaiki Culling tanpa bikin Lag.
+    // Kita "Dorong" perintah ke GPU supaya urutannya benar.
+    // Kita pakai glFlush() yang sudah ada di library (tidak perlu typedef manual).
     LOAD_GLES(glFlush);
     gles_glFlush(); 
     
@@ -216,8 +215,6 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
             } else {
                 // BELUM SIAP: Jangan tunggu!
                 // Kembalikan hasil terakhir (History).
-                // Karena kita sudah pakai glFlush di EndQuery, 
-                // kemungkinan "available" jadi TRUE akan lebih cepat di frame berikutnya.
                 *params = query->num; 
             }
         } else {
