@@ -247,38 +247,30 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* par
 }
 
 void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* params) {
-    //FLUSH_BEGINEND;
+    // FLUSH_BEGINEND; // Tetap matikan flush
+    
     glquery_t *query = find_query(id);
     if(!query) {
         errorShim(GL_INVALID_OPERATION);
         return;
     }
 
-    if(query->real_id) {
-        LOAD_GLES(glGetQueryObjectuiv);
-        
-        // Jika Minecraft meminta Hasil (RESULT)...
-        if (pname == GL_QUERY_RESULT) {
-            GLuint available = GL_FALSE;
-            // 1. Tanya dulu: Apakah hasil sudah siap?
-            gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT_AVAILABLE, &available);
-            
-            if (available == GL_TRUE) {
-                // 2A. Jika SIAP, ambil hasil aslinya (Cepat, tidak blocking)
-                gles_glGetQueryObjectuiv(query->real_id, GL_QUERY_RESULT, params);
-            } else {
-                // 2B. Jika BELUM SIAP, Jangan tunggu (Nanti 8 FPS!)
-                // Kembalikan 1 (Visible) sebagai prediksi aman.
-                // Ini mencegah objek menghilang (culling artifact) dan menjaga FPS tinggi.
-                *params = 1; 
-            }
-        } else {
-            // Untuk parameter lain (misal GL_QUERY_RESULT_AVAILABLE), teruskan saja
-            gles_glGetQueryObjectuiv(query->real_id, pname, params);
-        }
+    // --- DIAGNOSTIC MODE: WRITE ONLY ---
+    // Kita "Pura-pura" tidak tahu ada hardware query.
+    // Kita langsung return "1" (Visible) agar Minecraft merender semuanya.
+    // Tujuannya: Mengecek apakah glBeginQuery di background bikin lag atau tidak.
+    
+    if (pname == GL_QUERY_RESULT || pname == GL_QUERY_RESULT_NO_WAIT) {
+        *params = 1; // Selalu Terlihat (Force Visible)
+    } else if (pname == GL_QUERY_RESULT_AVAILABLE) {
+        *params = GL_TRUE; // Selalu Siap
     } else {
         *params = 0;
     }
+    
+    // PENTING: Jangan panggil LOAD_GLES atau gles_glGetQueryObjectuiv di sini!
+    // Biarkan GPU kerja sendiri, kita masa bodoh dengan hasilnya.
+    
     noerrorShim();
 }
 
