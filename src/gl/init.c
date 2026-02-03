@@ -46,13 +46,11 @@ static void fast_math() {
 }
 #endif
 
-#ifndef DEFAULT_ES
-#if defined(PANDORA) || defined(ANDROID)
-#define DEFAULT_ES 1
-#else
-#define DEFAULT_ES 2
+#ifdef DEFAULT_ES
+#undef DEFAULT_ES
 #endif
-#endif
+
+#define DEFAULT_ES 3
 
 void load_libs();
 void glx_init();
@@ -108,7 +106,7 @@ void initialize_gl4es() {
         globals4es.nobanner = IsEnvVarTrue("LIBGL_NOBANNER");
         #endif
 
-        SHUT_LOGD("Initialising gl4es\n");
+        SHUT_LOGD("Initialising GL4ES 3\n");
 
     if(!globals4es.nobanner) print_build_infos();
 
@@ -211,8 +209,6 @@ void initialize_gl4es() {
         break;
     }
 
-    SHUT_LOGD("Using GLES %s backend\n", (globals4es.es==1)?"1.1":"2.0");
-
     env(LIBGL_NODEPTHTEX, globals4es.nodepthtex, "Disable usage of Depth Textures");
 
     const char* env_drmcard = GetEnvVar("LIBGL_DRMCARD");
@@ -251,6 +247,21 @@ void initialize_gl4es() {
     }
 
     GetHardwareExtensions(gl4es_notest);
+
+    if(hardext.vendor & VEND_IMGTEC) {
+        if(hardext.occlusion_query) {
+            globals4es.queries = 1;
+        } else {
+            globals4es.queries = 0;
+        }
+
+        globals4es.notexrect = 1;
+        globals4es.avoid16bits = 0;
+
+        if(hardext.npot < 3) {
+            globals4es.defaultwrap = 1;
+        }
+    }
 
 #if !defined(NO_LOADER) && !defined(NO_GBM)
     if(globals4es.usegbm)
@@ -386,9 +397,9 @@ void initialize_gl4es() {
         snprintf(globals4es.version, 49, "%s gl4es wrapper %d.%d.%d", env_version, MAJOR, MINOR, REVISION);
         SHUT_LOGD("Targeting OpenGL %s\n", env_version);
     } else {
-        snprintf(globals4es.version, 49, "%d.%d gl4es wrapper %d.%d.%d", globals4es.gl/10, globals4es.gl%10, MAJOR, MINOR, REVISION);
-        SHUT_LOGD("Targeting OpenGL %d.%d\n", globals4es.gl/10, globals4es.gl%10);
-    }
+        snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper (%d.%d.%d)", globals4es.gl/10, globals4es.gl%10, MAJOR, MINOR, REVISION);
+        SHUT_LOGD("Targeting OpenGL %d.%d\n", globals4es.gl/10, globals4es.gl%10);                 
+    }    
 
     if(hardext.srgb && IsEnvVarTrue("LIBGL_SRGB")) {
         globals4es.glx_surface_srgb = 2;

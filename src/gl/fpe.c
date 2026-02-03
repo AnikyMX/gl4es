@@ -298,8 +298,8 @@ uniform_t* findUniform(khash_t(uniformlist) *uniforms, const char* name)
 }
 // ********* Old Program binding Handling *********
 void APIENTRY_GL4ES fpe_oldprogram(fpe_state_t* state) {
-    LOAD_GLES2(glGetShaderInfoLog);
-    LOAD_GLES2(glGetProgramInfoLog);
+    LOAD_GLES3(glGetShaderInfoLog);
+    LOAD_GLES3(glGetProgramInfoLog);
     GLint status;
     // There is an old program (either vtx or frg or both)
     oldprogram_t* old_vtx = getOldProgram(state->vertex_prg_id);
@@ -391,8 +391,8 @@ void APIENTRY_GL4ES fpe_program(int ispoint) {
             if(state.vertex_prg_id || state.fragment_prg_id) {
                 fpe_oldprogram(&state);
             } else {
-                LOAD_GLES2(glGetShaderInfoLog);
-                LOAD_GLES2(glGetProgramInfoLog);
+                LOAD_GLES3(glGetShaderInfoLog);
+                LOAD_GLES3(glGetProgramInfoLog);
                 GLint status;
                 // no old program, using regular FPE
                 glstate->fpe->vert = gl4es_glCreateShader(GL_VERTEX_SHADER);
@@ -482,7 +482,7 @@ program_t* APIENTRY_GL4ES fpe_CustomShader(program_t* glprogram, fpe_state_t* st
         // re-run the BindAttribLocation if any
         {
             attribloc_t *al;
-            LOAD_GLES2(glBindAttribLocation);   // using real one to avoid overwriting of attribloc...
+            LOAD_GLES3(glBindAttribLocation);   // using real one to avoid overwriting of attribloc...
             kh_foreach_value(glprogram->attribloc, al,
                 gles_glBindAttribLocation(fpe->prog, al->index, al->name);
             );
@@ -559,7 +559,7 @@ program_t* APIENTRY_GL4ES fpe_CustomShader_DefaultVertex(program_t* glprogram, f
         // re-run the BindAttribLocation if any
         {
             attribloc_t *al;
-            LOAD_GLES2(glBindAttribLocation);   // using real one to avoid overwriting of attribloc...
+            LOAD_GLES3(glBindAttribLocation);   // using real one to avoid overwriting of attribloc...
             kh_foreach_value(glprogram->attribloc, al,
                 gles_glBindAttribLocation(fpe->prog, al->index, al->name);
             );
@@ -836,7 +836,7 @@ void APIENTRY_GL4ES fpe_glDrawElements(GLenum mode, GLsizei count, GLenum type, 
 void APIENTRY_GL4ES fpe_glDrawArraysInstanced(GLenum mode, GLint first, GLsizei count, GLsizei primcount) {
     DBG(printf("fpe_glDrawArraysInstanced(%s, %d, %d, %d), program=%d\n", PrintEnum(mode), first, count, primcount, glstate->glsl->program);)
     LOAD_GLES(glDrawArrays);
-    LOAD_GLES2(glVertexAttrib4fv);
+    LOAD_GLES3(glVertexAttrib4fv);
     scratch_t scratch = {0};
     GLfloat tmp[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     realize_glenv(mode==GL_POINTS, first, count, 0, NULL, &scratch);
@@ -886,7 +886,7 @@ void APIENTRY_GL4ES fpe_glDrawArraysInstanced(GLenum mode, GLint first, GLsizei 
 void APIENTRY_GL4ES fpe_glDrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLsizei primcount) {
     DBG(printf("fpe_glDrawElementsInstanced(%s, %d, %s, %p, %d), program=%d\n", PrintEnum(mode), count, PrintEnum(type), indices, primcount, glstate->glsl->program);)
     LOAD_GLES(glDrawElements);
-    LOAD_GLES2(glVertexAttrib4fv);
+    LOAD_GLES3(glVertexAttrib4fv);
     scratch_t scratch = {0};
     realize_glenv(mode==GL_POINTS, 0, count, type, indices, &scratch);
     program_t *glprogram = glstate->gleshard->glprogram;
@@ -1047,12 +1047,12 @@ void realize_glenv(int ispoint, int first, int count, GLenum type, const void* i
     // the handling of GL_BGRA size of GL_DOUBLE using 1 scratch in not ideal, and a waste when dealing with Buffers
     // TODO: have the scratch buffer part of the VBO, and tag it dirty when buffer is changed (or always dirty for VBO 0)
     if(hardext.esversion==1) return;
-    LOAD_GLES2(glEnableVertexAttribArray)
-    LOAD_GLES2(glDisableVertexAttribArray);
-    LOAD_GLES2(glVertexAttribPointer);
-    LOAD_GLES2(glVertexAttribIPointer);
-    LOAD_GLES2(glVertexAttrib4fv);
-    LOAD_GLES2(glUseProgram);
+    LOAD_GLES3(glEnableVertexAttribArray)
+    LOAD_GLES3(glDisableVertexAttribArray);
+    LOAD_GLES3(glVertexAttribPointer);
+    LOAD_GLES3(glVertexAttribIPointer);
+    LOAD_GLES3(glVertexAttrib4fv);
+    LOAD_GLES3(glUseProgram);
     // update texture state for fpe only
     if(glstate->fpe_bound_changed && !glstate->glsl->program) {
         for(int i=0; i<glstate->fpe_bound_changed; i++) {
@@ -1156,8 +1156,8 @@ void realize_glenv(int ispoint, int first, int count, GLenum type, const void* i
         }
         if(need && tex) {
             DBG(printf("LIBGL: Need to Bind/Unbind FBO!");)
-            LOAD_GLES2_OR_OES(glBindFramebuffer);
-            LOAD_GLES2_OR_OES(glFramebufferTexture2D);
+            LOAD_GLES3_OR_OES(glBindFramebuffer);
+            LOAD_GLES3_OR_OES(glFramebufferTexture2D);
             //gles_glFramebufferTexture2D(GL_FRAMEBUFFER, tex->binded_attachment, GL_TEXTURE_2D, 0, 0);
             gles_glBindFramebuffer(GL_FRAMEBUFFER, 0);
             gles_glBindFramebuffer(GL_FRAMEBUFFER, glstate->fbo.current_fb->id);
@@ -1567,7 +1567,7 @@ void realize_glenv(int ispoint, int first, int count, GLenum type, const void* i
 
 void realize_blitenv(int alpha) {
     DBG(printf("realize_blitenv(%d)\n", alpha);)
-    LOAD_GLES2(glUseProgram);
+    LOAD_GLES3(glUseProgram);
     if(glstate->gleshard->program != ((alpha)?glstate->blit->program_alpha:glstate->blit->program)) {
         glstate->gleshard->program = ((alpha)?glstate->blit->program_alpha:glstate->blit->program);
         gles_glUseProgram(glstate->gleshard->program);
@@ -1578,8 +1578,8 @@ void realize_blitenv(int alpha) {
         vertexattrib_t *v = &glstate->gleshard->vertexattrib[i];
         // enable / disable Array if needed
         if(v->enabled != ((i<2)?1:0)) {
-            LOAD_GLES2(glEnableVertexAttribArray)
-            LOAD_GLES2(glDisableVertexAttribArray);
+            LOAD_GLES3(glEnableVertexAttribArray)
+            LOAD_GLES3(glDisableVertexAttribArray);
             v->enabled = ((i<2)?1:0);
             if(v->enabled)
                 gles_glEnableVertexAttribArray(i);
@@ -1599,7 +1599,7 @@ void realize_blitenv(int alpha) {
                 v->pointer = ((i==0)?glstate->blit->vert:glstate->blit->tex);
                 v->buffer = 0;
                 v->real_buffer = 0;
-                LOAD_GLES2(glVertexAttribPointer);
+                LOAD_GLES3(glVertexAttribPointer);
                 gles_glVertexAttribPointer(i, v->size, v->type, v->normalized, v->stride, v->pointer);
             }
         }

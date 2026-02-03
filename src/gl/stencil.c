@@ -36,7 +36,7 @@ void APIENTRY_GL4ES gl4es_glStencilMaskSeparate(GLenum face, GLuint mask) {
         noerrorShim();
         return;
     }
-    LOAD_GLES2_OR_OES(glStencilMaskSeparate);
+    LOAD_GLES3_OR_OES(glStencilMaskSeparate);
     FLUSH_BEGINEND;
     glstate->stencil.mask[(face==GL_FRONT)?0:1] = mask;
 
@@ -89,7 +89,7 @@ void APIENTRY_GL4ES gl4es_glStencilFuncSeparate(GLenum face, GLenum func, GLint 
         noerrorShim();
         return;
     }
-    LOAD_GLES2_OR_OES(glStencilFuncSeparate);
+    LOAD_GLES3_OR_OES(glStencilFuncSeparate);
     errorGL();
     FLUSH_BEGINEND;
     glstate->stencil.func[idx]=func;
@@ -143,7 +143,7 @@ void APIENTRY_GL4ES gl4es_glStencilOpSeparate(GLenum face, GLenum sfail, GLenum 
         noerrorShim();
         return;
     }
-    LOAD_GLES2_OR_OES(glStencilOpSeparate);
+    LOAD_GLES3_OR_OES(glStencilOpSeparate);
     errorGL();
     glstate->stencil.sfail[idx] = sfail;
     glstate->stencil.dpfail[idx] = zfail;

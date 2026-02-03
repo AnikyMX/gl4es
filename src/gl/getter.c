@@ -135,6 +135,8 @@ void BuildExtensionsList() {
 				);
         if(!globals4es.notexrect)
             strcat(extensions, "GL_ARB_texture_rectangle ");
+        if(globals4es.queries)
+            strcat(extensions, "GL_ARB_occlusion_query ");
         if(globals4es.vabgra)
             strcat(extensions, "GL_ARB_vertex_array_bgra ");
 		if(globals4es.npot>=1)
@@ -249,9 +251,12 @@ const GLubyte* APIENTRY_GL4ES gl4es_glGetString(GLenum name) {
             BuildExtensionsList();
             return glstate->extensions;
 		case GL_VENDOR:
-			return (GLubyte *)"ptitSeb";
-		case GL_RENDERER:
-			return (GLubyte *)"GL4ES wrapper";
+			return (GLubyte *)"ptitSeb & AnikyMX";
+		case GL_RENDERER: {
+            static char renderer_buff[128];
+            snprintf(renderer_buff, 127, "%s", hardext.renderer);
+			return (GLubyte *)renderer_buff;
+		}
 		case GL_SHADING_LANGUAGE_VERSION:
             if(globals4es.gl==21)
             return (GLubyte *)"1.20 via gl4es";
@@ -1133,7 +1138,7 @@ void APIENTRY_GL4ES gl4es_glGetClipPlanef(GLenum plane, GLfloat * equation)
         errorShim(GL_INVALID_ENUM);
         return;
     }
-    LOAD_GLES2(glGetClipPlanef);
+    LOAD_GLES3(glGetClipPlanef);
     if(gles_glGetClipPlanef)
     {
         errorGL();

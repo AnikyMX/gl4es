@@ -19,7 +19,7 @@ void init_matrix(glstate_t* glstate);
 
 static void free_renderbuffer(glrenderbuffer_t *rend)
 {
-    LOAD_GLES2_OR_OES(glDeleteRenderbuffers);
+    LOAD_GLES3_OR_OES(glDeleteRenderbuffers);
     if(!rend || !gles_glDeleteRenderbuffers)
         return;
     if(rend->secondarybuffer)
@@ -32,7 +32,7 @@ static void free_renderbuffer(glrenderbuffer_t *rend)
 
 static void free_framebuffer(glframebuffer_t *fb)
 {
-    LOAD_GLES2_OR_OES(glDeleteFramebuffers);
+    LOAD_GLES3_OR_OES(glDeleteFramebuffers);
     if(!fb || !gles_glDeleteFramebuffers)
         return;
     if(fb->id)
@@ -559,7 +559,7 @@ void DeleteGLState(void* oldstate) {
     }
     // oldfbos
     if(!state->shared_cnt && state->fbo.old) {
-        LOAD_GLES2_OR_OES(glDeleteFramebuffers);
+        LOAD_GLES3_OR_OES(glDeleteFramebuffers);
         gles_glDeleteFramebuffers(state->fbo.old->nbr, state->fbo.old->fbos);
         free(state->fbo.old->fbos);
         free(state->fbo.old);

@@ -28,7 +28,7 @@ GLuint APIENTRY_GL4ES gl4es_glCreateShader(GLenum shaderType) {
     static GLuint lastshader = 0;
     GLuint shader;
     // create the shader
-    LOAD_GLES2(glCreateShader);
+    LOAD_GLES3(glCreateShader);
     if(gles_glCreateShader) {
         shader = gles_glCreateShader(shaderType);
         if(!shader) {
@@ -107,7 +107,7 @@ void APIENTRY_GL4ES gl4es_glDeleteShader(GLuint shader) {
         actually_deleteshader(shader);
 
         // delete the shader in GLES2 hardware (if any)
-        LOAD_GLES2(glDeleteShader);
+        LOAD_GLES3(glDeleteShader);
         if(gles_glDeleteShader) {
             errorGL();
             gles_glDeleteShader(shader);
@@ -121,14 +121,14 @@ void APIENTRY_GL4ES gl4es_glCompileShader(GLuint shader) {
     CHECK_SHADER(void, shader)
 
     glshader->compiled = 1;
-    LOAD_GLES2(glCompileShader);
+    LOAD_GLES3(glCompileShader);
     if(gles_glCompileShader) {
         gles_glCompileShader(glshader->id);
         errorGL();
         if(globals4es.logshader) {
             // get compile status and print shaders sources if compile fail...
-            LOAD_GLES2(glGetShaderiv);
-            LOAD_GLES2(glGetShaderInfoLog);
+            LOAD_GLES3(glGetShaderiv);
+            LOAD_GLES3(glGetShaderInfoLog);
             GLint status = 0;
             gles_glGetShaderiv(glshader->id, GL_COMPILE_STATUS, &status);
             if(status!=GL_TRUE) {
@@ -169,7 +169,7 @@ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLc
         for (int i=0; i<count; i++)
             strcat(glshader->source, string[i]);
     }
-    LOAD_GLES2(glShaderSource);
+    LOAD_GLES3(glShaderSource);
     if (gles_glShaderSource) {
         // adapt shader if needed (i.e. not an es2 context and shader is not #version 100)
         if(glstate->glsl->es2 && !strncmp(glshader->source, "#version 100", 12))
@@ -220,7 +220,7 @@ int isShaderCompatible(GLuint shader, shaderconv_need_t *need) {
 #undef SUPER
 
 void redoShader(GLuint shader, shaderconv_need_t *need) {
-    LOAD_GLES2(glShaderSource);
+    LOAD_GLES3(glShaderSource);
     if(!gles_glShaderSource)
         return;
     CHECK_SHADER(void, shader)
@@ -297,7 +297,7 @@ void APIENTRY_GL4ES gl4es_glGetShaderInfoLog(GLuint shader, GLsizei maxLength, G
         errorShim(GL_INVALID_OPERATION);
         return;
     }
-    LOAD_GLES2(glGetShaderInfoLog);
+    LOAD_GLES3(glGetShaderInfoLog);
     if(gles_glGetShaderInfoLog) {
         gles_glGetShaderInfoLog(glshader->id, maxLength, length, infoLog);
         errorGL();
@@ -311,7 +311,7 @@ void APIENTRY_GL4ES gl4es_glGetShaderiv(GLuint shader, GLenum pname, GLint *para
     DBG(printf("glGetShaderiv(%d, %s, %p)\n", shader, PrintEnum(pname), params);)
     // find shader
     CHECK_SHADER(void, shader)
-    LOAD_GLES2(glGetShaderiv);
+    LOAD_GLES3(glGetShaderiv);
     noerrorShim();
     switch (pname) {
         case GL_SHADER_TYPE:
@@ -348,7 +348,7 @@ void APIENTRY_GL4ES gl4es_glGetShaderiv(GLuint shader, GLenum pname, GLint *para
 }
 
 void APIENTRY_GL4ES gl4es_glGetShaderPrecisionFormat(GLenum shaderType, GLenum precisionType, GLint *range, GLint *precision) {
-    LOAD_GLES2(glGetShaderPrecisionFormat);
+    LOAD_GLES3(glGetShaderPrecisionFormat);
     if(gles_glGetShaderPrecisionFormat) {
         gles_glGetShaderPrecisionFormat(shaderType, precisionType, range, precision);
         errorGL();
@@ -359,7 +359,7 @@ void APIENTRY_GL4ES gl4es_glGetShaderPrecisionFormat(GLenum shaderType, GLenum p
 
 void APIENTRY_GL4ES gl4es_glShaderBinary(GLsizei count, const GLuint *shaders, GLenum binaryFormat, const void *binary, GLsizei length) {
     // TODO: check consistancy of "shaders" values
-    LOAD_GLES2(glShaderBinary);
+    LOAD_GLES3(glShaderBinary);
     if (gles_glShaderBinary) {
         gles_glShaderBinary(count, shaders, binaryFormat, binary, length);
         errorGL();
@@ -369,7 +369,7 @@ void APIENTRY_GL4ES gl4es_glShaderBinary(GLsizei count, const GLuint *shaders, G
 }
 
 void APIENTRY_GL4ES gl4es_glReleaseShaderCompiler(void) {
-    LOAD_GLES2(glReleaseShaderCompiler);
+    LOAD_GLES3(glReleaseShaderCompiler);
     if(gles_glReleaseShaderCompiler) {
         gles_glReleaseShaderCompiler();
         errorGL();

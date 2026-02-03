@@ -28,7 +28,7 @@ float FASTMATH dot4(const float *a, const float *b) {
 void cross3(const float *a, const float *b, float* c) {
     //TODO Neonize? Cross product doesn't seems NEON friendly, and this is not much used.
     c[0] = a[1]*b[2] - a[2]*b[1];
-    c[1] = a[3]*b[0] - a[0]*b[3];
+    c[1] = a[2]*b[0] - a[0]*b[2];
     c[2] = a[0]*b[1] - a[1]*b[0];
 }
 
@@ -259,6 +259,22 @@ void matrix_inverse3_transpose(const float *m, float *r) {
 }
     
 void matrix_mul(const float *a, const float *b, float *c) {
+	static const float id[16] = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+
+    if (memcmp(a, id, 64) == 0) { // 16 float * 4 byte = 64
+        if(c != b) memcpy(c, b, 64);
+        return;
+    }
+
+    if (memcmp(b, id, 64) == 0) {
+        if(c != a) memcpy(c, a, 64);
+        return;
+    }
 #if defined(__ARM_NEON__) && !defined(__APPLE__)
     const float* a1 = a+8;
 	const float* b1=b+8;
@@ -323,21 +339,48 @@ void matrix_mul(const float *a, const float *b, float *c) {
 }
 
 void vector4_mult(const float *a, const float *b, float *c) {
-//TODO: NEON version of this
-    for (int i=0; i<4; i++)
-        c[i] = a[i]*b[i];
+#if defined(__ARM_NEON__) && !defined(__APPLE__)
+    asm volatile (
+    "vld1.32 {q0}, [%1]  \n" // Load a (4 float)
+    "vld1.32 {q1}, [%2]  \n" // Load b
+    "vmul.f32 q0, q0, q1 \n" // q0 * q1
+    "vst1.32 {q0}, [%0]  \n" // c
+    ::"r"(c), "r"(a), "r"(b)
+    : "q0", "q1", "memory"
+    );
+#else
+    for (int i=0; i<4; i++) c[i] = a[i]*b[i];
+#endif
 }
 
 void vector4_add(const float *a, const float *b, float *c) {
-//TODO: NEON version of this
-    for (int i=0; i<4; i++)
-        c[i] = a[i]+b[i];
+#if defined(__ARM_NEON__) && !defined(__APPLE__)
+    asm volatile (
+    "vld1.32 {q0}, [%1]  \n" // Load a
+    "vld1.32 {q1}, [%2]  \n" // Load b
+    "vadd.f32 q0, q0, q1 \n" // q0 + q1
+    "vst1.32 {q0}, [%0]  \n"
+    ::"r"(c), "r"(a), "r"(b)
+    : "q0", "q1", "memory"
+    );
+#else
+    for (int i=0; i<4; i++) c[i] = a[i]+b[i];
+#endif
 }
 
 void vector4_sub(const float *a, const float *b, float *c) {
-    //TODO: NEON version of this
-        for (int i=0; i<4; i++)
-            c[i] = a[i]-b[i];
+#if defined(__ARM_NEON__) && !defined(__APPLE__)
+    asm volatile (
+    "vld1.32 {q0}, [%1]  \n" // Load a
+    "vld1.32 {q1}, [%2]  \n" // Load b
+    "vsub.f32 q0, q0, q1 \n" // q0 - q1
+    "vst1.32 {q0}, [%0]  \n"
+    ::"r"(c), "r"(a), "r"(b)
+    : "q0", "q1", "memory"
+    );
+#else
+        for (int i=0; i<4; i++) c[i] = a[i]-b[i];
+#endif
 }
     
 void set_identity(float* mat) {

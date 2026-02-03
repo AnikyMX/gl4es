@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12...3.10)
+cmake_minimum_required(VERSION 3.22.1)
 
 # Import modules
 include(CheckCompilerFlag)
@@ -68,7 +68,7 @@ if(NOT DEFAULT_ES)
     if(PANDORA)
         set(DEFAULT_ES 1)
     else()
-        set(DEFAULT_ES 2)
+        set(DEFAULT_ES 3)
     endif()
 endif()
 
@@ -113,7 +113,7 @@ endif()
 # Android
 if(ANDROID)
     add_definitions(-DANDROID)
-    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=2)
+    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=3)
 endif()
 
 if(USE_ANDROID_LOG)
