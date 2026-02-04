@@ -907,7 +907,15 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
                   GLsizei width, GLsizei height, GLint border,
                   GLenum format, GLenum type, const GLvoid *data) {
     DBG(printf("glTexImage2D on target=%s with unpack_row_length(%i), size(%i,%i) and skip(%i,%i), format(internal)=%s(%s), type=%s, data=%p, level=%i (mipmap_need=%i, mipmap_auto=%i, base_level=%i, max_level=%i) => texture=%u (streamed=%i), glstate->list.compiling=%d\n", PrintEnum(target), glstate->texture.unpack_row_length, width, height, glstate->texture.unpack_skip_pixels, glstate->texture.unpack_skip_rows, PrintEnum(format), (internalformat==3)?"3":(internalformat==4?"4":PrintEnum(internalformat)), PrintEnum(type), data, level, glstate->texture.bound[glstate->texture.active][what_target(target)]->mipmap_need, glstate->texture.bound[glstate->texture.active][what_target(target)]->mipmap_auto, glstate->texture.bound[glstate->texture.active][what_target(target)]->base_level, glstate->texture.bound[glstate->texture.active][what_target(target)]->max_level, glstate->texture.bound[glstate->texture.active][what_target(target)]->texture, glstate->texture.bound[glstate->texture.active][what_target(target)]->streamed, glstate->list.compiling);)
-    
+
+    // --- [SPY LOG START: TEXIMAGE] ---
+    // Hanya log jika lebar tekstur > 64 (untuk menghindari spam ikon kecil)
+    if (width > 64 && height > 64) {
+        printf("LIBGL: [Spy-Img] glTexImage2D Target=%s Level=%d Size=%dx%d Format=%s Type=%s Data=%p\n", 
+            PrintEnum(target), level, width, height, PrintEnum(format), PrintEnum(type), data);
+    }
+    // --- [SPY LOG END] ---
+
     if(data==NULL && (internalformat == GL_RGB16F || internalformat == GL_RGBA16F))
     internal2format_type(internalformat, &format, &type);
 
@@ -1538,6 +1546,14 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
 void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
                      GLsizei width, GLsizei height, GLenum format, GLenum type,
                      const GLvoid *data) {
+
+    // --- [SPY LOG START: SUBIMAGE] ---
+    if (width > 64 && height > 64) {
+        printf("LIBGL: [Spy-Sub] glTexSubImage2D Target=%s Level=%d Size=%dx%d Pos=%d,%d Format=%s Type=%s\n", 
+            PrintEnum(target), level, width, height, xoffset, yoffset, PrintEnum(format), PrintEnum(type));
+    }
+    // --- [SPY LOG END] ---
+
 
     if (glstate->list.pending) {
         gl4es_flush();

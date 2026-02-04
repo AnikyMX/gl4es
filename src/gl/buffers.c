@@ -203,12 +203,7 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
             LOAD_GLES(glGenBuffers);
             gles_glGenBuffers(1, &buff->real_buffer);
         }
-        // --- [SPY LOG START] ---
-        // Log ini akan memberitahu kita kalau VBO benar-benar dibuat di GPU
-        if(hardext.mapbuffer) { 
-             printf("LIBGL: [Spy] Real VBO Created/Updated! ID=%u, Size=%zi\n", buff->real_buffer, size);
-        }
-        // --- [SPY LOG END] ---
+
         LOAD_GLES(glBufferData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(target, buff->real_buffer);
@@ -480,7 +475,6 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
         return NULL;
     }
 
-    // LOGIKA BARU: Cek flag hardext.mapbuffer (PowerVR)
     if(hardext.mapbuffer && buff->real_buffer) {
         static void* (*ptr_glMapBufferRange)(GLenum, GLintptr, GLsizeiptr, GLbitfield) = NULL;
         static int function_checked = 0;
@@ -496,11 +490,6 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
                 // Jangan dlclose handle agar pointer tetap valid selama aplikasi jalan
             }
 
-            if(ptr_glMapBufferRange) 
-                printf("LIBGL: PowerVR Optimization - glMapBufferRange FOUND via dlsym!\n");
-            else 
-                printf("LIBGL: Warning - glMapBufferRange NOT FOUND via dlsym.\n");
-            
             function_checked = 1;
         }
 
@@ -745,11 +734,6 @@ void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsi
             if (handle) {
                 ptr_glMapBufferRange = dlsym(handle, "glMapBufferRange");
             }
-            
-            if(ptr_glMapBufferRange) 
-                printf("LIBGL: PowerVR Optimization - glMapBufferRange (Range Variant) FOUND via dlsym!\n");
-            else 
-                printf("LIBGL: Warning - glMapBufferRange (Range Variant) NOT FOUND via dlsym.\n");
             
             function_checked = 1;
         }
