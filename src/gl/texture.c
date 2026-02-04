@@ -1580,7 +1580,7 @@ void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoff
         
         return; // SELESAI! Tanpa CPU Copy.
     }
-    // --- [MOD END] ---
+    // --- [MOD END] ---    
 
 #ifdef __BIG_ENDIAN__
     if(type==GL_UNSIGNED_INT_8_8_8_8)
