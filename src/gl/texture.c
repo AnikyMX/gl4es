@@ -1545,41 +1545,47 @@ void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoff
     }
     realize_bound(glstate->texture.active, target);
 
-    // --- [MOD START] BGRA FAST PATH ---
+    // --- [MOD START] BGRA FAST PATH (REVISI) ---
     // Optimasi khusus untuk Panorama Minecraft & UI
-    if (hardext.bgra8888 && format == GL_BGRA && type == GL_UNSIGNED_BYTE && 
-        glstate->texture.unpack_row_length == 0 && !globals4es.texstream) {
+    // KITA HAPUS syarat unpack_row_length agar lebih agresif, tapi hati-hati
+    if (hardext.bgra8888 && format == GL_BGRA && type == GL_UNSIGNED_BYTE && !globals4es.texstream) {
         
+        static int bgra_optimized_once = 0; // Penanda agar log cuma muncul sekali
+        if (!bgra_optimized_once) {
+            printf("LIBGL: [SUCCESS] BGRA Fast Path ACTIVATED! (No more CPU conversion)\n");
+            bgra_optimized_once = 1;
+        }
+
         const GLuint rtarget = map_tex_target(target);
         LOAD_GLES(glTexSubImage2D);
         
-        // Langsung kirim ke Driver tanpa malloc/conversion!
-        noerrorShim();
-        gles_glTexSubImage2D(rtarget, level, xoffset, yoffset, width, height, format, type, data);
-        
-        // Update shadow copy di RAM jika diperlukan (opsional, tapi aman dilakukan dengan memcpy cepat)
-        if ((target==GL_TEXTURE_2D) && globals4es.texcopydata) {
-             gltexture_t *bound = glstate->texture.bound[glstate->texture.active][what_target(target)];
-             if (bound->data) {
-                 // Hitung offset memori
-                 // Asumsi format internal sama (BGRA) karena hardext.bgra8888 aktif
-                 void* dst = (char*)bound->data + (yoffset * bound->width + xoffset) * 4;
-                 // Gunakan memcpy yang jauh lebih cepat dari pixel_convert
-                 // Perlu diperhatikan: ini asumsi pitch/stride sama dengan width. 
-                 // Untuk menu minecraft (256x256), ini biasanya benar.
-                 if (bound->width == width) {
-                    memcpy(dst, data, width * height * 4);
-                 } else {
-                    // Copy per baris jika width berbeda (partial update)
-                    for (int i=0; i<height; i++) {
-                        memcpy((char*)dst + (i*bound->width*4), (char*)data + (i*width*4), width*4);
-                    }
+        // Handle Row Length (Minecraft kadang pakai ini untuk Atlas)
+        const GLvoid *final_data = data;
+        if (glstate->texture.unpack_row_length > 0 && glstate->texture.unpack_row_length != width) {
+             // Jika ada row length, kita tidak bisa kirim langsung jika driver GLES2 tidak support GL_UNPACK_ROW_LENGTH
+             // TAPI, untuk Panorama Minecraft (256x256), biasanya row_length = 0 atau sama dengan width.
+             // Jadi kita biarkan ini jatuh ke fallback jika row_length aneh-aneh.
+             // DO NOTHING, let it fall to slow path below
+        } else {
+            // JALUR TOL: Langsung kirim!
+            noerrorShim();
+            gles_glTexSubImage2D(rtarget, level, xoffset, yoffset, width, height, format, type, data);
+            
+            // Update shadow copy (Sangat Cepat)
+            if ((target==GL_TEXTURE_2D) && globals4es.texcopydata) {
+                 gltexture_t *bound = glstate->texture.bound[glstate->texture.active][what_target(target)];
+                 if (bound->data) {
+                     void* dst = (char*)bound->data + (yoffset * bound->width + xoffset) * 4;
+                     if (bound->width == width) {
+                        memcpy(dst, data, width * height * 4);
+                     } else {
+                        for (int i=0; i<height; i++)
+                            memcpy((char*)dst + (i*bound->width*4), (char*)data + (i*width*4), width*4);
+                     }
                  }
-             }
+            }
+            return; // KELUAR DARI FUNGSI SEKARANG
         }
-        
-        // Selesai! Return early untuk melewati ratusan baris kode lambat di bawah.
-        return;
     }
     // --- [MOD END] ---
 
