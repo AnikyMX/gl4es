@@ -203,6 +203,12 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
             LOAD_GLES(glGenBuffers);
             gles_glGenBuffers(1, &buff->real_buffer);
         }
+        // --- [SPY LOG START] ---
+        // Log ini akan memberitahu kita kalau VBO benar-benar dibuat di GPU
+        if(hardext.mapbuffer) { 
+             printf("LIBGL: [Spy] Real VBO Created/Updated! ID=%u, Size=%zi\n", buff->real_buffer, size);
+        }
+        // --- [SPY LOG END] ---
         LOAD_GLES(glBufferData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(target, buff->real_buffer);
@@ -707,33 +713,77 @@ void APIENTRY_GL4ES gl4es_glGetNamedBufferPointerv(GLuint buffer, GLenum pname, 
 	}
 }
 
+// --- [MOD START] Hardware MapBufferRange Implementation ---
 void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access)
 {
     DBG(printf("glMapBufferRange(%s, %p, %zd, 0x%x)\n", PrintEnum(target), (void*)offset, length, access);)
-	if (!buffer_target(target)) {
-		errorShim(GL_INVALID_ENUM);
-		return NULL;
-	}
+    if (!buffer_target(target)) {
+        errorShim(GL_INVALID_ENUM);
+        return NULL;
+    }
 
-	glbuffer_t *buff = getbuffer_buffer(target);
-	if (buff==NULL) {
+    glbuffer_t *buff = getbuffer_buffer(target);
+    if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-		return NULL;		// Should generate an error!
+        return NULL;
     }
     if(buff->mapped) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-	buff->access = access;
-	buff->mapped = 1;
+
+    // LOGIKA BARU: Injeksi dlsym untuk glMapBufferRange
+    if(hardext.mapbuffer && buff->real_buffer) {
+        static void* (*ptr_glMapBufferRange)(GLenum, GLintptr, GLsizeiptr, GLbitfield) = NULL;
+        static int function_checked = 0;
+
+        if (!function_checked) {
+            // Kita cari library GLES
+            void *handle = dlopen("libGLESv2.so", RTLD_LAZY);
+            if (!handle) handle = dlopen("libGLESv3.so", RTLD_LAZY);
+            
+            if (handle) {
+                ptr_glMapBufferRange = dlsym(handle, "glMapBufferRange");
+            }
+            
+            if(ptr_glMapBufferRange) 
+                printf("LIBGL: PowerVR Optimization - glMapBufferRange (Range Variant) FOUND via dlsym!\n");
+            else 
+                printf("LIBGL: Warning - glMapBufferRange (Range Variant) NOT FOUND via dlsym.\n");
+            
+            function_checked = 1;
+        }
+
+        // Eksekusi Hardware Map
+        if(ptr_glMapBufferRange) {
+             // Access flags bitfield di GLES biasanya kompatibel dengan GL
+             void* real_ptr = ptr_glMapBufferRange(target, offset, length, access);
+             
+             if(real_ptr) {
+                 buff->access = access; // Simpan flags akses
+                 buff->mapped = 1;
+                 buff->ranged = 1;      // Tandai sebagai Range Map
+                 buff->offset = offset;
+                 buff->length = length;
+                 noerrorShim();
+                 return real_ptr; // Return pointer VRAM asli!
+             }
+        }
+    }
+
+    // FALLBACK: Software Emulation
+    buff->access = access;
+    buff->mapped = 1;
     buff->ranged = 1;
     buff->offset = offset;
     buff->length = length;
-	noerrorShim();
+    noerrorShim();
     uintptr_t ret = (uintptr_t)buff->data;
     ret += offset;
-	return (void*)ret;
+    return (void*)ret;
 }
+// --- [MOD END] ---
+
 void APIENTRY_GL4ES gl4es_glFlushMappedBufferRange(GLenum target, GLintptr offset, GLsizeiptr length)
 {
     DBG(printf("glFlushMappedBufferRange(%s, %p, %zd)\n", PrintEnum(target), (void*)offset, length);)
