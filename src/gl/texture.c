@@ -908,14 +908,6 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
                   GLenum format, GLenum type, const GLvoid *data) {
     DBG(printf("glTexImage2D on target=%s with unpack_row_length(%i), size(%i,%i) and skip(%i,%i), format(internal)=%s(%s), type=%s, data=%p, level=%i (mipmap_need=%i, mipmap_auto=%i, base_level=%i, max_level=%i) => texture=%u (streamed=%i), glstate->list.compiling=%d\n", PrintEnum(target), glstate->texture.unpack_row_length, width, height, glstate->texture.unpack_skip_pixels, glstate->texture.unpack_skip_rows, PrintEnum(format), (internalformat==3)?"3":(internalformat==4?"4":PrintEnum(internalformat)), PrintEnum(type), data, level, glstate->texture.bound[glstate->texture.active][what_target(target)]->mipmap_need, glstate->texture.bound[glstate->texture.active][what_target(target)]->mipmap_auto, glstate->texture.bound[glstate->texture.active][what_target(target)]->base_level, glstate->texture.bound[glstate->texture.active][what_target(target)]->max_level, glstate->texture.bound[glstate->texture.active][what_target(target)]->texture, glstate->texture.bound[glstate->texture.active][what_target(target)]->streamed, glstate->list.compiling);)
 
-    // --- [SPY LOG START: TEXIMAGE] ---
-    // Hanya log jika lebar tekstur > 64 (untuk menghindari spam ikon kecil)
-    if (width > 64 && height > 64) {
-        printf("LIBGL: [Spy-Img] glTexImage2D Target=%s Level=%d Size=%dx%d Format=%s Type=%s Data=%p\n", 
-            PrintEnum(target), level, width, height, PrintEnum(format), PrintEnum(type), data);
-    }
-    // --- [SPY LOG END] ---
-
     if(data==NULL && (internalformat == GL_RGB16F || internalformat == GL_RGBA16F))
     internal2format_type(internalformat, &format, &type);
 
@@ -1546,21 +1538,50 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
 void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
                      GLsizei width, GLsizei height, GLenum format, GLenum type,
                      const GLvoid *data) {
-
-    // --- [SPY LOG START: SUBIMAGE] ---
-    if (width > 64 && height > 64) {
-        printf("LIBGL: [Spy-Sub] glTexSubImage2D Target=%s Level=%d Size=%dx%d Pos=%d,%d Format=%s Type=%s\n", 
-            PrintEnum(target), level, width, height, xoffset, yoffset, PrintEnum(format), PrintEnum(type));
-    }
-    // --- [SPY LOG END] ---
-
-
     if (glstate->list.pending) {
         gl4es_flush();
     } else {
         PUSH_IF_COMPILING(glTexSubImage2D);
     }
     realize_bound(glstate->texture.active, target);
+
+    // --- [MOD START] BGRA FAST PATH ---
+    // Optimasi khusus untuk Panorama Minecraft & UI
+    if (hardext.bgra8888 && format == GL_BGRA && type == GL_UNSIGNED_BYTE && 
+        glstate->texture.unpack_row_length == 0 && !globals4es.texstream) {
+        
+        const GLuint rtarget = map_tex_target(target);
+        LOAD_GLES(glTexSubImage2D);
+        
+        // Langsung kirim ke Driver tanpa malloc/conversion!
+        noerrorShim();
+        gles_glTexSubImage2D(rtarget, level, xoffset, yoffset, width, height, format, type, data);
+        
+        // Update shadow copy di RAM jika diperlukan (opsional, tapi aman dilakukan dengan memcpy cepat)
+        if ((target==GL_TEXTURE_2D) && globals4es.texcopydata) {
+             gltexture_t *bound = glstate->texture.bound[glstate->texture.active][what_target(target)];
+             if (bound->data) {
+                 // Hitung offset memori
+                 // Asumsi format internal sama (BGRA) karena hardext.bgra8888 aktif
+                 void* dst = (char*)bound->data + (yoffset * bound->width + xoffset) * 4;
+                 // Gunakan memcpy yang jauh lebih cepat dari pixel_convert
+                 // Perlu diperhatikan: ini asumsi pitch/stride sama dengan width. 
+                 // Untuk menu minecraft (256x256), ini biasanya benar.
+                 if (bound->width == width) {
+                    memcpy(dst, data, width * height * 4);
+                 } else {
+                    // Copy per baris jika width berbeda (partial update)
+                    for (int i=0; i<height; i++) {
+                        memcpy((char*)dst + (i*bound->width*4), (char*)data + (i*width*4), width*4);
+                    }
+                 }
+             }
+        }
+        
+        // Selesai! Return early untuk melewati ratusan baris kode lambat di bawah.
+        return;
+    }
+    // --- [MOD END] ---
 
 #ifdef __BIG_ENDIAN__
     if(type==GL_UNSIGNED_INT_8_8_8_8)
