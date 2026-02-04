@@ -10,6 +10,7 @@
 #include "init.h"
 #include "loader.h"
 
+#include <dlfcn.h>
 #include <EGL/egl.h>
 
 #ifndef GL_MAP_READ_BIT
@@ -452,7 +453,7 @@ void APIENTRY_GL4ES gl4es_glGetNamedBufferParameteriv(GLuint buffer, GLenum valu
     bufferGetParameteriv(buff, value, data);
 }
 
-// --- [MOD START] Hardware Mapping Implementation ---
+// --- [MOD START] Hardware Mapping Implementation (FIXED LINKER) ---
 void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
     DBG(printf("glMapBuffer(%s, %s)\n", PrintEnum(target), PrintEnum(access));)
     if (!buffer_target(target)) {
@@ -473,30 +474,36 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
         return NULL;
     }
 
-    // LOGIKA BARU: Cek flag hardext.mapbuffer (PowerVR) dan apakah buffer ada di GPU
+    // LOGIKA BARU: Cek flag hardext.mapbuffer (PowerVR)
     if(hardext.mapbuffer && buff->real_buffer) {
-        // Pointer fungsi statis (Lazy Loading)
         static void* (*ptr_glMapBufferRange)(GLenum, GLintptr, GLsizeiptr, GLbitfield) = NULL;
         static int function_checked = 0;
 
         if (!function_checked) {
-            // Cari fungsi native GLES 3.0
-            ptr_glMapBufferRange = (void*)eglGetProcAddress("glMapBufferRange");
+            // FIX: Gunakan dlopen/dlsym untuk menghindari Linker Error
+            // Kita coba load langsung dari libGLESv2 (karena glMapBufferRange adalah Core GLES 3)
+            void *handle = dlopen("libGLESv2.so", RTLD_LAZY);
+            if (!handle) handle = dlopen("libGLESv3.so", RTLD_LAZY);
+            
+            if (handle) {
+                ptr_glMapBufferRange = dlsym(handle, "glMapBufferRange");
+                // Jangan dlclose handle agar pointer tetap valid selama aplikasi jalan
+            }
+
             if(ptr_glMapBufferRange) 
-                printf("LIBGL: PowerVR Optimization - glMapBufferRange FOUND!\n");
+                printf("LIBGL: PowerVR Optimization - glMapBufferRange FOUND via dlsym!\n");
             else 
-                printf("LIBGL: Warning - glMapBufferRange NOT FOUND despite GL_OES_mapbuffer active.\n");
+                printf("LIBGL: Warning - glMapBufferRange NOT FOUND via dlsym.\n");
+            
             function_checked = 1;
         }
 
-        // Jika fungsi ditemukan, eksekusi hardware mapping
         if(ptr_glMapBufferRange) {
             GLbitfield accessBits = 0;
             if (access == GL_READ_ONLY) accessBits = GL_MAP_READ_BIT;
             else if (access == GL_WRITE_ONLY) accessBits = GL_MAP_WRITE_BIT;
             else accessBits = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT;
 
-            // Panggil Driver PowerVR Langsung!
             void* real_ptr = ptr_glMapBufferRange(target, 0, buff->size, accessBits);
             
             if (real_ptr) {
@@ -504,12 +511,12 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
                 buff->mapped = 1;
                 buff->ranged = 0; 
                 noerrorShim();
-                return real_ptr; // Return pointer VRAM asli!
+                return real_ptr;
             }
         }
     }
 
-    // FALLBACK: Software Emulation (Kode Lama)
+    // FALLBACK
     buff->access = access;
     buff->mapped = 1;
     buff->ranged = 0;
@@ -537,7 +544,7 @@ void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
 	return buff->data;		// Not nice, should do some copy or something probably
 }
 
-// --- [MOD START] Hardware Unmap Implementation ---
+// --- [MOD START] Hardware Unmap Implementation (FIXED LINKER) ---
 GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     DBG(printf("glUnmapBuffer(%s)\n", PrintEnum(target));)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
@@ -565,19 +572,23 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
         static int unmap_checked = 0;
 
         if(!unmap_checked) {
-            ptr_glUnmapBuffer = (void*)eglGetProcAddress("glUnmapBuffer");
+            // FIX: Gunakan dlopen/dlsym
+            void *handle = dlopen("libGLESv2.so", RTLD_LAZY);
+            if (!handle) handle = dlopen("libGLESv3.so", RTLD_LAZY);
+            
+            if(handle) {
+                ptr_glUnmapBuffer = dlsym(handle, "glUnmapBuffer");
+            }
             unmap_checked = 1;
         }
 
         if(ptr_glUnmapBuffer) {
              // Coba Unmap via Driver
-             // NOTE: Kita asumsikan jika mapbuffer aktif, pointer di buff->data tidak valid untuk disync
+             // PENTING: Jika pointer ini dipanggil dan berhasil, return value biasanya GL_TRUE (1)
              hardware_unmap_success = ptr_glUnmapBuffer(target);
         }
     }
 
-    // JIKA Hardware Unmap Berhasil: KITA STOP DI SINI.
-    // Jangan lanjut ke kode di bawah (Software Sync) karena itu akan menimpa data GPU dengan data RAM kosong!
     if(hardware_unmap_success) {
         if (buff->mapped) {
             buff->mapped = 0;
@@ -587,7 +598,6 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     }
 
     // FALLBACK: Software Sync (Kode Lama)
-    // Hanya dijalankan jika Hardware Map tidak aktif
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
