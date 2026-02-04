@@ -792,13 +792,6 @@ void APIENTRY_GL4ES gl4es_glFramebufferTexture2D(GLenum target, GLenum attachmen
                 gltexture_t *bound = glstate->texture.bound[glstate->texture.active][ENABLED_TEX2D];
                 GLuint oldtex = bound->glname;
                 if (oldtex!=scrap_tex) gles_glBindTexture(GL_TEXTURE_2D, scrap_tex);
-                // --- [SPY LOG START] ---
-                static int scrap_spy = 0;
-                if (scrap_spy < 100) {
-                    printf("LIBGL: [Spy-Scrap] WARNING! Allocating New Scrap Texture: Size %dx%d\n", scrap_width, scrap_height);
-                    scrap_spy++;
-                }
-                // --- [SPY LOG END] ---
                 gles_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, scrap_width, scrap_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
                 if (oldtex!=scrap_tex) gles_glBindTexture(GL_TEXTURE_2D, oldtex);
         }
@@ -1402,18 +1395,6 @@ void APIENTRY_GL4ES gl4es_glBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX
     // filter will be taken only for ReadFBO has no Texture attached (so readpixel is used)
     DBG(printf("glBlitFramebuffer(%d, %d, %d, %d,  %d, %d, %d, %d,  0x%04X, %s) fbo_read=%d, fbo_draw=%d\n",
         srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, PrintEnum(filter), glstate->fbo.fbo_read->id, glstate->fbo.fbo_draw->id);)
-
-    // --- [SPY LOG START] ---
-    static int blit_spy_counter = 0;
-    if (blit_spy_counter < 200) { // Log 200 frame pertama
-        blit_spy_counter++;
-        // Hapus if(hardext...) yang bikin error, cukup log panggilannya saja
-        printf("LIBGL: [Spy-Blit] glBlitFramebuffer Called! Src=(%d,%d %dx%d) Dst=(%d,%d %dx%d) Mask=0x%X Filter=0x%X\n",
-            srcX0, srcY0, srcX1-srcX0, srcY1-srcY0,
-            dstX0, dstY0, dstX1-dstX0, dstY1-dstY0,
-            mask, filter);
-    }
-    // --- [SPY LOG END] ---
 
     if((mask&GL_COLOR_BUFFER_BIT)==0)
         return; // cannot copy DEPTH or STENCIL data on GLES, only COLOR_BUFFER...

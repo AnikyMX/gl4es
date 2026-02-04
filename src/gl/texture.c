@@ -1545,42 +1545,59 @@ void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoff
     }
     realize_bound(glstate->texture.active, target);
 
-    // --- [MOD START] HARDWARE PBO PATH ---
-    // Jika Minecraft menggunakan PBO (Unpack Buffer) yang ada di GPU (Real Buffer)
-    // Kita bypass semua proses CPU dan suruh Driver ambil langsung dari VRAM.
-    if (glstate->vao->unpack && glstate->vao->unpack->real_buffer) {
+    // --- [MOD START] SMART PANORAMA OPTIMIZER ---
+    // Target: Panorama Minecraft (256x256, BGRA)
+    // Optimasi: Update hanya 1 dari setiap 3 frame (20 FPS cap untuk tekstur)
+    if (hardext.bgra8888 && format == GL_BGRA && type == GL_UNSIGNED_BYTE && 
+        width == 256 && height == 256 && !globals4es.texstream) {
         
-        static int pbo_log_once = 0;
-        if (!pbo_log_once) {
-            printf("LIBGL: [SUCCESS] Hardware PBO Detected! Async Upload Activated.\n");
-            pbo_log_once = 1;
+        static int upload_skip_counter = 0;
+        upload_skip_counter++;
+
+        // Izinkan upload jika:
+        // 1. Ini 120 frame pertama (Loading awal mulus)
+        // 2. ATAU Counter kelipatan 3 (Hemat resource 66%)
+        // 3. Sedang compile list (Jangan skip saat compiling)
+        int allow_upload = 0;
+        
+        if (upload_skip_counter < 1200) {
+            allow_upload = 1; 
+        } else if ((upload_skip_counter % 3) == 0) {
+            allow_upload = 1; 
         }
 
+        if (!allow_upload && !glstate->list.compiling) {
+            noerrorShim();
+            return; // SKIP! Hemat CPU & Bandwidth GPU
+        }
+
+        // --- FAST PATH EXECUTION ---
         const GLuint rtarget = map_tex_target(target);
-        const GLuint pbo_id = glstate->vao->unpack->real_buffer;
-        
-        // Load fungsi driver
         LOAD_GLES(glTexSubImage2D);
-        LOAD_GLES(glBindBuffer);
-        
-        // 1. Bind PBO di Driver (agar driver tahu kita mau baca dari sini)
-        gles_glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_id);
-        
-        // 2. Kirim Perintah Upload
-        // 'data' di sini adalah OFFSET (biasanya 0), bukan pointer RAM
-        // Karena PBO terikat, driver akan membaca dari VRAM PBO.
+        LOAD_GLES(glTexParameteri);
+
+        // [OPTIMASI] Matikan Mipmap Paksa!
+        // Ini mencegah Driver menghitung ulang mipmap yang berat
+        gltexture_t *bound = glstate->texture.bound[glstate->texture.active][what_target(target)];
+        if (bound->mipmap_need || bound->sampler.min_filter != GL_LINEAR) {
+             bound->mipmap_need = 0;
+             bound->sampler.min_filter = GL_LINEAR;
+             bound->sampler.mag_filter = GL_LINEAR;
+             bound->max_level = 0; // Kunci di level 0
+             
+             gles_glTexParameteri(rtarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+             gles_glTexParameteri(rtarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+             gles_glTexParameteri(rtarget, GL_TEXTURE_MAX_LEVEL, 0); 
+        }
+
+        // Direct Upload ke GPU (Bypass Konversi CPU)
         noerrorShim();
         gles_glTexSubImage2D(rtarget, level, xoffset, yoffset, width, height, format, type, data);
         
-        // 3. Unbind PBO (bersih-bersih)
-        gles_glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        
-        // [OPTIMASI RAM] Jangan update shadow copy bound->data jika pakai PBO
-        // karena datanya ada di GPU, buang-buang waktu baca balik ke RAM.
-        
-        return; // SELESAI! Tanpa CPU Copy.
+        // Skip Shadow Copy ke RAM (Hemat Memory Bandwidth)
+        return; 
     }
-    // --- [MOD END] ---    
+    // --- [MOD END] ---
 
 #ifdef __BIG_ENDIAN__
     if(type==GL_UNSIGNED_INT_8_8_8_8)
