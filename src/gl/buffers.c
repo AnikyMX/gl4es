@@ -10,6 +10,13 @@
 #include "init.h"
 #include "loader.h"
 
+#include <EGL/egl.h>
+
+#ifndef GL_MAP_READ_BIT
+#define GL_MAP_READ_BIT 0x0001
+#define GL_MAP_WRITE_BIT 0x0002
+#endif
+
 //#define DEBUG
 #ifdef DEBUG
 #define DBG(a) a
@@ -445,12 +452,13 @@ void APIENTRY_GL4ES gl4es_glGetNamedBufferParameteriv(GLuint buffer, GLenum valu
     bufferGetParameteriv(buff, value, data);
 }
 
+// --- [MOD START] Hardware Mapping Implementation ---
 void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
     DBG(printf("glMapBuffer(%s, %s)\n", PrintEnum(target), PrintEnum(access));)
-	if (!buffer_target(target)) {
-		errorShim(GL_INVALID_ENUM);
-		return (void*)NULL;
-	}
+    if (!buffer_target(target)) {
+        errorShim(GL_INVALID_ENUM);
+        return (void*)NULL;
+    }
 
     if(target==GL_ARRAY_BUFFER)
         VaoSharedClear(glstate->vao);
@@ -458,18 +466,58 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
     glbuffer_t *buff = getbuffer_buffer(target);
     if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-		return NULL;
+        return NULL;
     }
     if(buff->mapped) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-	buff->access = access;	// not used
-	buff->mapped = 1;
+
+    // LOGIKA BARU: Cek flag hardext.mapbuffer (PowerVR) dan apakah buffer ada di GPU
+    if(hardext.mapbuffer && buff->real_buffer) {
+        // Pointer fungsi statis (Lazy Loading)
+        static void* (*ptr_glMapBufferRange)(GLenum, GLintptr, GLsizeiptr, GLbitfield) = NULL;
+        static int function_checked = 0;
+
+        if (!function_checked) {
+            // Cari fungsi native GLES 3.0
+            ptr_glMapBufferRange = (void*)eglGetProcAddress("glMapBufferRange");
+            if(ptr_glMapBufferRange) 
+                printf("LIBGL: PowerVR Optimization - glMapBufferRange FOUND!\n");
+            else 
+                printf("LIBGL: Warning - glMapBufferRange NOT FOUND despite GL_OES_mapbuffer active.\n");
+            function_checked = 1;
+        }
+
+        // Jika fungsi ditemukan, eksekusi hardware mapping
+        if(ptr_glMapBufferRange) {
+            GLbitfield accessBits = 0;
+            if (access == GL_READ_ONLY) accessBits = GL_MAP_READ_BIT;
+            else if (access == GL_WRITE_ONLY) accessBits = GL_MAP_WRITE_BIT;
+            else accessBits = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT;
+
+            // Panggil Driver PowerVR Langsung!
+            void* real_ptr = ptr_glMapBufferRange(target, 0, buff->size, accessBits);
+            
+            if (real_ptr) {
+                buff->access = access;
+                buff->mapped = 1;
+                buff->ranged = 0; 
+                noerrorShim();
+                return real_ptr; // Return pointer VRAM asli!
+            }
+        }
+    }
+
+    // FALLBACK: Software Emulation (Kode Lama)
+    buff->access = access;
+    buff->mapped = 1;
     buff->ranged = 0;
-	noerrorShim();
-	return buff->data;		// Not nice, should do some copy or something probably
+    noerrorShim();
+    return buff->data;      
 }
+// --- [MOD END] ---
+
 void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
     DBG(printf("glMapNamedBuffer(%u, %s)\n", buffer, PrintEnum(access));)
 
@@ -489,15 +537,16 @@ void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
 	return buff->data;		// Not nice, should do some copy or something probably
 }
 
+// --- [MOD START] Hardware Unmap Implementation ---
 GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     DBG(printf("glUnmapBuffer(%s)\n", PrintEnum(target));)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
     FLUSH_BEGINEND;
         
-	if (!buffer_target(target)) {
-		errorShim(GL_INVALID_ENUM);
-		return GL_FALSE;
-	}
+    if (!buffer_target(target)) {
+        errorShim(GL_INVALID_ENUM);
+        return GL_FALSE;
+    }
 
     if(target==GL_ARRAY_BUFFER)
         VaoSharedClear(glstate->vao);
@@ -505,9 +554,40 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     glbuffer_t *buff = getbuffer_buffer(target);
     if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-		return GL_FALSE;
+        return GL_FALSE;
     }
-	noerrorShim();
+    noerrorShim();
+
+    // LOGIKA BARU: Handle Hardware Unmap
+    int hardware_unmap_success = 0;
+    if(hardext.mapbuffer && buff->real_buffer && buff->mapped) {
+        static GLboolean (*ptr_glUnmapBuffer)(GLenum) = NULL;
+        static int unmap_checked = 0;
+
+        if(!unmap_checked) {
+            ptr_glUnmapBuffer = (void*)eglGetProcAddress("glUnmapBuffer");
+            unmap_checked = 1;
+        }
+
+        if(ptr_glUnmapBuffer) {
+             // Coba Unmap via Driver
+             // NOTE: Kita asumsikan jika mapbuffer aktif, pointer di buff->data tidak valid untuk disync
+             hardware_unmap_success = ptr_glUnmapBuffer(target);
+        }
+    }
+
+    // JIKA Hardware Unmap Berhasil: KITA STOP DI SINI.
+    // Jangan lanjut ke kode di bawah (Software Sync) karena itu akan menimpa data GPU dengan data RAM kosong!
+    if(hardware_unmap_success) {
+        if (buff->mapped) {
+            buff->mapped = 0;
+            buff->ranged = 0;
+            return GL_TRUE;
+        }
+    }
+
+    // FALLBACK: Software Sync (Kode Lama)
+    // Hanya dijalankan jika Hardware Map tidak aktif
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -520,12 +600,14 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
         gles_glBufferSubData(buff->type, buff->offset, buff->length, (void*)((uintptr_t)buff->data+buff->offset));
     }
     if (buff->mapped) {
-		buff->mapped = 0;
+        buff->mapped = 0;
         buff->ranged = 0;
-		return GL_TRUE;
-	}
-	return GL_FALSE;
+        return GL_TRUE;
+    }
+    return GL_FALSE;
 }
+// --- [MOD END] ---
+
 GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
     DBG(printf("glUnmapNamedBuffer(%u)\n", buffer);)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
