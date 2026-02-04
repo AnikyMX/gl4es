@@ -515,7 +515,7 @@ void initialize_gl4es() {
         #if defined(GL4ES_COMPILE_FOR_USE_IN_SHARED_LIB) && defined(AMIGAOS4) // temporary workaround for not-working envs
            globals4es.maxbatch = 40;
         #else
-           globals4es.maxbatch = 150;
+           globals4es.maxbatch = 0;
        #endif
     globals4es.minbatch = 0;
     int tmp = 0, tmp2 = 0;
