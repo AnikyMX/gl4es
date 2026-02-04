@@ -1407,17 +1407,11 @@ void APIENTRY_GL4ES gl4es_glBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX
     static int blit_spy_counter = 0;
     if (blit_spy_counter < 200) { // Log 200 frame pertama
         blit_spy_counter++;
+        // Hapus if(hardext...) yang bikin error, cukup log panggilannya saja
         printf("LIBGL: [Spy-Blit] glBlitFramebuffer Called! Src=(%d,%d %dx%d) Dst=(%d,%d %dx%d) Mask=0x%X Filter=0x%X\n",
             srcX0, srcY0, srcX1-srcX0, srcY1-srcY0,
             dstX0, dstY0, dstX1-dstX0, dstY1-dstY0,
             mask, filter);
-            
-        // Cek apakah kita pakai Hardware Blit NV/GLES3?
-        if (hardext.blitframebuffer) {
-             printf("LIBGL: [Spy-Blit] ... Hardware Driver Blit is AVAILABLE.\n");
-        } else {
-             printf("LIBGL: [Spy-Blit] ... Hardware Driver Blit is MISSING. Using Fallback!\n");
-        }
     }
     // --- [SPY LOG END] ---
 
