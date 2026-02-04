@@ -1545,46 +1545,44 @@ void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoff
     }
     realize_bound(glstate->texture.active, target);
 
-    // --- [MOD START] BGRA FAST PATH (REVISI) ---
-    // Optimasi khusus untuk Panorama Minecraft & UI
-    // KITA HAPUS syarat unpack_row_length agar lebih agresif, tapi hati-hati
+    // --- [MOD START] BGRA FAST PATH (FINAL OPTIMIZED) ---
+    // Optimasi Agresif: Bypass CPU, Matikan Mipmap, Matikan Shadow Copy
     if (hardext.bgra8888 && format == GL_BGRA && type == GL_UNSIGNED_BYTE && !globals4es.texstream) {
         
-        static int bgra_optimized_once = 0; // Penanda agar log cuma muncul sekali
+        static int bgra_optimized_once = 0;
         if (!bgra_optimized_once) {
-            printf("LIBGL: [SUCCESS] BGRA Fast Path ACTIVATED! (No more CPU conversion)\n");
+            printf("LIBGL: [SUCCESS] BGRA Fast Path ACTIVATED! (No CPU Copy + No Mipmap Gen)\n");
             bgra_optimized_once = 1;
         }
 
-        const GLuint rtarget = map_tex_target(target);
-        LOAD_GLES(glTexSubImage2D);
-        
-        // Handle Row Length (Minecraft kadang pakai ini untuk Atlas)
-        const GLvoid *final_data = data;
-        if (glstate->texture.unpack_row_length > 0 && glstate->texture.unpack_row_length != width) {
-             // Jika ada row length, kita tidak bisa kirim langsung jika driver GLES2 tidak support GL_UNPACK_ROW_LENGTH
-             // TAPI, untuk Panorama Minecraft (256x256), biasanya row_length = 0 atau sama dengan width.
-             // Jadi kita biarkan ini jatuh ke fallback jika row_length aneh-aneh.
-             // DO NOTHING, let it fall to slow path below
-        } else {
-            // JALUR TOL: Langsung kirim!
+        // Pastikan kita tidak sedang compile Display List
+        if (!glstate->list.compiling) {
+            const GLuint rtarget = map_tex_target(target);
+            LOAD_GLES(glTexSubImage2D);
+            LOAD_GLES(glTexParameteri);
+
+            // [OPTIMASI KRUSIAL] Matikan Mipmap!
+            // Panorama Minecraft seringkali secara default meminta mipmap.
+            // Kita paksa matikan agar PowerVR tidak menghitung ulang mipmap tiap frame.
+            gltexture_t *bound = glstate->texture.bound[glstate->texture.active][what_target(target)];
+            if (bound->mipmap_need || bound->sampler.min_filter != GL_LINEAR || bound->sampler.mag_filter != GL_LINEAR) {
+                 bound->mipmap_need = 0;
+                 bound->sampler.min_filter = GL_LINEAR;
+                 bound->sampler.mag_filter = GL_LINEAR;
+                 // Paksa driver set filter ke Linear (Ringan)
+                 gles_glTexParameteri(rtarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                 gles_glTexParameteri(rtarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            }
+
+            // JALUR TOL: Langsung kirim ke Driver
             noerrorShim();
             gles_glTexSubImage2D(rtarget, level, xoffset, yoffset, width, height, format, type, data);
             
-            // Update shadow copy (Sangat Cepat)
-            if ((target==GL_TEXTURE_2D) && globals4es.texcopydata) {
-                 gltexture_t *bound = glstate->texture.bound[glstate->texture.active][what_target(target)];
-                 if (bound->data) {
-                     void* dst = (char*)bound->data + (yoffset * bound->width + xoffset) * 4;
-                     if (bound->width == width) {
-                        memcpy(dst, data, width * height * 4);
-                     } else {
-                        for (int i=0; i<height; i++)
-                            memcpy((char*)dst + (i*bound->width*4), (char*)data + (i*width*4), width*4);
-                     }
-                 }
-            }
-            return; // KELUAR DARI FUNGSI SEKARANG
+            // [OPTIMASI RAM] Shadow Copy DIHAPUS
+            // Kita tidak melakukan memcpy ke bound->data. 
+            // Ini menghemat bandwidth memori Helio P35 secara signifikan.
+
+            return; // STOP! Jangan kerjakan kode lain di bawah.
         }
     }
     // --- [MOD END] ---
