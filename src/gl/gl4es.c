@@ -1019,6 +1019,14 @@ void gl4es_flush() {
 extern void BlitEmulatedPixmap(int win);
 #endif
 void APIENTRY_GL4ES gl4es_glFlush(void) {
+	// --- [SPY LOG START] ---
+    static int flush_spy_count = 0;
+    if (flush_spy_count < 100) { // Limit log agar tidak banjir
+        flush_spy_count++;
+        printf("LIBGL: [Spy-Sync] glFlush called! (Stalling Pipeline?)\n");
+    }
+    // --- [SPY LOG END] ---
+
 	LOAD_GLES(glFlush);
     
     realize_textures(0);
@@ -1036,6 +1044,14 @@ void APIENTRY_GL4ES gl4es_glFlush(void) {
 AliasExport_V(void,glFlush);
 
 void APIENTRY_GL4ES gl4es_glFinish(void) {
+	// --- [SPY LOG START] ---
+    static int finish_spy_count = 0;
+    if (finish_spy_count < 100) {
+        finish_spy_count++;
+        printf("LIBGL: [Spy-Sync] glFinish called! (CPU Waiting...)\n");
+    }
+    // --- [SPY LOG END] ---
+
 	LOAD_GLES(glFinish);
     
     realize_textures(0);
