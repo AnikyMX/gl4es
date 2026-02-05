@@ -1,6 +1,6 @@
 /*
  * Refactored fpe_cache.c for GL4ES
- * Optimized for on ARMv8
+ * Optimized for ARMv8
  * - Ultra-fast 64-bit FNV-1a Hashing for FPE States
  * - Buffered I/O for PSA (Precompiled Shader Archive)
  * - Branch prediction hints for hot paths
