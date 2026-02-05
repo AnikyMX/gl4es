@@ -1,11 +1,3 @@
-/*
- * Refactored getter.c for GL4ES
- * Optimized for ARMv8
- * - O(N) Extension String Builder (Removed O(N^2) strcat bottleneck)
- * - Branch Prediction for State Queries
- * - Streamlined Error Handling
- */
-
 #include <gl4eshint.h>
 #include "../glx/hardext.h"
 #include "debug.h"
@@ -32,29 +24,24 @@
 GLenum APIENTRY_GL4ES gl4es_glGetError(void) {
     DBG(printf("glGetError(), noerror=%d, type_error=%d shim_error=%s\n", globals4es.noerror, glstate->type_error, PrintEnum(glstate->shim_error));)
     
-    // Fast path: if noerror shim is enabled, skip everything
     if (globals4es.noerror)
         return GL_NO_ERROR;
 
     GLenum err = GL_NO_ERROR;
     
-    // Check internal shim error first (priority)
     if (glstate->shim_error != GL_NO_ERROR) {
         err = glstate->shim_error;
         glstate->shim_error = GL_NO_ERROR;
         return err;
     }
 
-    // Only query driver if no internal error type 2 (shim-only mode)
     if (glstate->type_error != 2) {
         LOAD_GLES(glGetError);
         err = gles_glGetError();
         
-        // If we were in purging mode (1), ignore this error and reset logic
         if (glstate->type_error == 1) {
-            glstate->type_error = 0; // Reset
+            glstate->type_error = 0;
             if (err != GL_NO_ERROR) {
-                // If there was an error during purge, recurse once to clear potential queue or return valid
                 return gl4es_glGetError();
             }
         }
@@ -68,7 +55,6 @@ void APIENTRY_GL4ES gl4es_glGetPointerv(GLenum pname, GLvoid* *params) {
     DBG(printf("glGetPointerv(%s, %p)\n", PrintEnum(pname), params);)
     noerrorShim();
     
-    // Direct memory mapping from GL State
     switch(pname) {
         case GL_COLOR_ARRAY_POINTER:
             *params = (void*)glstate->vao->vertexattrib[ATT_COLOR].pointer;
@@ -102,26 +88,20 @@ void APIENTRY_GL4ES gl4es_glGetPointerv(GLenum pname, GLvoid* *params) {
 }
 AliasExport(void,glGetPointerv,,(GLenum pname, GLvoid* *params));
 
-// Helper for O(N) string building
 static void add_extension(char** ptr, const char* ext) {
     if (ext && *ext) {
         size_t len = strlen(ext);
         memcpy(*ptr, ext, len);
         *ptr += len;
-        // Don't add space here, assume ext strings handle their spacing or add manually if needed
-        // but looking at original code, they are string literals with spaces.
     }
 }
 
 void BuildExtensionsList() {
     if (glstate->extensions) return;
 
-    // Allocation size prediction (approximate, large enough)
     glstate->extensions = (GLubyte*)malloc(8192); 
     char *p = (char *)glstate->extensions;
 
-    // O(N) Construction - No more strcat bottleneck
-    // Baseline extensions
     add_extension(&p, "GL_EXT_abgr GL_EXT_packed_pixels GL_EXT_compiled_vertex_array GL_EXT_compiled_vertex_arrays ");
     add_extension(&p, "GL_ARB_vertex_buffer_object GL_ARB_vertex_array_object GL_ARB_vertex_buffer GL_EXT_vertex_array ");
     add_extension(&p, "GL_EXT_secondary_color GL_ARB_multitexture GL_ARB_texture_border_clamp ");
@@ -140,7 +120,6 @@ void BuildExtensionsList() {
     add_extension(&p, "GL_MGL_packed_pixels ");
     #endif
 
-    // Conditional extensions
     if (!globals4es.notexrect) add_extension(&p, "GL_ARB_texture_rectangle ");
     if (globals4es.queries)    add_extension(&p, "GL_ARB_occlusion_query ");
     if (globals4es.vabgra)     add_extension(&p, "GL_ARB_vertex_array_bgra ");
@@ -193,19 +172,17 @@ void BuildExtensionsList() {
     
     if (hardext.prgbin_n) add_extension(&p, "GL_ARB_get_program_binary ");
 
-    *p = '\0'; // Null terminate
+    *p = '\0';
 
-    // Generate extension array map
     glstate->num_extensions = 0;
     char *start = (char*)glstate->extensions;
     char *scan = start;
     
-    // Count extensions
     while ((scan = strchr(scan, ' '))) { 
         while (*scan == ' ') scan++; 
         glstate->num_extensions++; 
     }
-    if (*start && glstate->num_extensions == 0) glstate->num_extensions = 1; // At least one
+    if (*start && glstate->num_extensions == 0) glstate->num_extensions = 1;
 
     glstate->extensions_list = (GLubyte**)calloc(glstate->num_extensions + 1, sizeof(GLubyte*));
     
@@ -421,7 +398,6 @@ int gl4es_commonGet(GLenum pname, GLfloat *params) {
         case GL_DRAW_FRAMEBUFFER_BINDING: *params = glstate->fbo.fbo_draw->id; break;
         case GL_CURRENT_PROGRAM: *params = glstate->glsl->program; break;
         
-        // Optimizing ranges with simple arithmetic instead of unrolled switch cases
         default:
             if (pname >= GL_CLIP_PLANE0 && pname < GL_CLIP_PLANE0 + 6) {
                 *params = glstate->enable.plane[pname - GL_CLIP_PLANE0];
@@ -432,7 +408,6 @@ int gl4es_commonGet(GLenum pname, GLfloat *params) {
                 break;
             }
             
-            // Global hints & GL4ES hints
             switch(pname) {
                 case GL_PERSPECTIVE_CORRECTION_HINT:
                 case GL_POINT_SMOOTH_HINT:
@@ -449,7 +424,6 @@ int gl4es_commonGet(GLenum pname, GLfloat *params) {
                 case GL_SAMPLER_BINDING:
                     *params = (glstate->samplers.sampler[glstate->texture.active]) ? glstate->samplers.sampler[glstate->texture.active]->glname : 0;
                     break;
-                // GL4ES hints
                 case GL_SHRINK_HINT_GL4ES: *params = globals4es.texshrink; break;
                 case GL_ALPHAHACK_HINT_GL4ES: *params = globals4es.alphahack; break;
                 case GL_RECYCLEFBO_HINT_GL4ES: *params = globals4es.recyclefbo; break;
@@ -468,7 +442,6 @@ int gl4es_commonGet(GLenum pname, GLfloat *params) {
     return 1;
 }
 
-// glGetIntegerv
 void APIENTRY_GL4ES gl4es_glGetIntegerv(GLenum pname, GLint *params) {
     DBG(printf("glGetIntegerv(%s, %p)\n", PrintEnum(pname), params);)
     if (unlikely(params == NULL)) {
@@ -477,7 +450,6 @@ void APIENTRY_GL4ES gl4es_glGetIntegerv(GLenum pname, GLint *params) {
     }
     
     GLfloat fparam;
-    // Fast path: reuse commonGet to avoid duplication
     if (gl4es_commonGet(pname, &fparam)) {
         *params = (GLint)fparam;
         return;
@@ -488,7 +460,6 @@ void APIENTRY_GL4ES gl4es_glGetIntegerv(GLenum pname, GLint *params) {
     noerrorShim();
 
     switch (pname) {
-        // Texture bindings (Int specific)
         case GL_TEXTURE_BINDING_1D:
             *params = glstate->texture.bound[glstate->texture.active][ENABLED_TEX1D]->texture;
             break;
@@ -505,7 +476,6 @@ void APIENTRY_GL4ES gl4es_glGetIntegerv(GLenum pname, GLint *params) {
             *params = glstate->texture.bound[glstate->texture.active][ENABLED_TEXTURE_RECTANGLE]->texture;
             break;
             
-        // Arrays & Complex types
         case GL_POINT_SIZE_RANGE:
         case GL_ALIASED_POINT_SIZE_RANGE:
             gles_glGetIntegerv(GL_ALIASED_POINT_SIZE_RANGE, params);
@@ -513,20 +483,18 @@ void APIENTRY_GL4ES gl4es_glGetIntegerv(GLenum pname, GLint *params) {
             
         case GL_NUM_COMPRESSED_TEXTURE_FORMATS:
             gles_glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, params);
-            (*params) += 4; // Adding fake DXTc support
+            (*params) += 4;
             break;
             
         case GL_COMPRESSED_TEXTURE_FORMATS:
             gles_glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &dummy);
             gles_glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, params);
-            // Append fake formats
             params[dummy++] = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
             params[dummy++] = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
             params[dummy++] = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
             params[dummy++] = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
             break;
             
-        // State arrays (using fast memcpy where possible)
         case GL_LIGHT_MODEL_AMBIENT:
             for (dummy = 0; dummy < 4; dummy++) params[dummy] = (GLint)glstate->light.ambient[dummy]; 
             break;
@@ -552,8 +520,9 @@ void APIENTRY_GL4ES gl4es_glGetIntegerv(GLenum pname, GLint *params) {
             for (dummy = 0; dummy < 3; dummy++) params[dummy] = (GLint)glstate->pointsprite.distance[dummy];
             break;
         case GL_DEPTH_RANGE:
-            params[0] = (GLint)(glstate->depth.Near * 2147483647l);
-            params[1] = (GLint)(glstate->depth.Far * 2147483647l);
+            // FIXED: Added .0f and explicit GLint cast to silence implicit conversion warning
+            params[0] = (GLint)(glstate->depth.Near * 2147483647.0f);
+            params[1] = (GLint)(glstate->depth.Far * 2147483647.0f);
             break;
             
         default:
@@ -563,8 +532,10 @@ void APIENTRY_GL4ES gl4es_glGetIntegerv(GLenum pname, GLint *params) {
 }
 AliasExport(void,glGetIntegerv,,(GLenum pname, GLint *params));
 
-// Helper macro to access top of stack
+// Helper macro to access top of stack (Guarded to prevent redefinition)
+#ifndef TOP
 #define TOP(A) (glstate->A->stack + (glstate->A->top * 16))
+#endif
 
 void APIENTRY_GL4ES gl4es_glGetFloatv(GLenum pname, GLfloat *params) {
     DBG(printf("glGetFloatv(%s, %p)\n", PrintEnum(pname), params);)
@@ -759,8 +730,8 @@ void APIENTRY_GL4ES gl4es_glGetMaterialfv(GLenum face, GLenum pname, GLfloat * p
     }
     
     noerrorShim();
-    // Use pointer logic to select source structure
-    material_side_t *mat = (face == GL_FRONT) ? &glstate->material.front : &glstate->material.back;
+    // FIXED: Use correct type 'material_t'
+    material_t *mat = (face == GL_FRONT) ? &glstate->material.front : &glstate->material.back;
 
     switch(pname) {
         case GL_AMBIENT:
