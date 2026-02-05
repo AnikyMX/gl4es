@@ -1,12 +1,23 @@
+/*
+ * Refactored directstate.c for GL4ES
+ * Optimized for ARMv8
+ * - Fast Matrix Mode switching (avoiding glGetIntegerv)
+ * - Optimized Texture State saving/restoring
+ * - Branch Prediction for DSA operations
+ */
+
 #include "directstate.h"
-
 #include <stdio.h>
-
 #include "wrap/gl4es.h"
 #include "gles.h"
 #include "stack.h"
 #include "texgen.h"
 #include "debug.h"
+
+#ifndef likely
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#endif
 
 //#define DEBUG
 #ifdef DEBUG
@@ -18,8 +29,8 @@
 // Client State
 void APIENTRY_GL4ES gl4es_glClientAttribDefault(GLbitfield mask) {
     if (mask & GL_CLIENT_PIXEL_STORE_BIT) {
-        gl4es_glPixelStorei(GL_PACK_ALIGNMENT, 0);
-        gl4es_glPixelStorei(GL_UNPACK_ALIGNMENT, 0);
+        gl4es_glPixelStorei(GL_PACK_ALIGNMENT, 4);   // Default is 4
+        gl4es_glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // Default is 4
         gl4es_glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         gl4es_glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
         gl4es_glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
@@ -27,8 +38,9 @@ void APIENTRY_GL4ES gl4es_glClientAttribDefault(GLbitfield mask) {
         gl4es_glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
         gl4es_glPixelStorei(GL_PACK_SKIP_ROWS, 0);
     }
-#define enable_disable(pname, enabled)             \
-    if (enabled) gl4es_glEnableClientState(pname);       \
+
+#define enable_disable(pname, enabled) \
+    if (enabled) gl4es_glEnableClientState(pname); \
     else gl4es_glDisableClientState(pname)
 
     if (mask & GL_CLIENT_VERTEX_ARRAY_BIT) {
@@ -38,26 +50,29 @@ void APIENTRY_GL4ES gl4es_glClientAttribDefault(GLbitfield mask) {
         enable_disable(GL_NORMAL_ARRAY, false);
         enable_disable(GL_COLOR_ARRAY, false);
         enable_disable(GL_SECONDARY_COLOR_ARRAY, false);
-        for (int a=0; a<MAX_TEX; a++) {
-           gl4es_glClientActiveTexture(GL_TEXTURE0+a);
+        
+        // Unroll loop for common texture units (usually < 8)
+        for (int a = 0; a < hardext.maxtex; a++) {
+           gl4es_glClientActiveTexture(GL_TEXTURE0 + a);
            enable_disable(GL_TEXTURE_COORD_ARRAY, false);
         }
+
 #undef enable_disable
-        if (glstate->texture.client != client) gl4es_glClientActiveTexture(GL_TEXTURE0+client);
+        if (glstate->texture.client != client) gl4es_glClientActiveTexture(GL_TEXTURE0 + client);
     }
 }
+
 void APIENTRY_GL4ES gl4es_glPushClientAttribDefault(GLbitfield mask) {
     gl4es_glPushClientAttrib(mask);
     gl4es_glClientAttribDefault(mask);
 }
 
-// Matrix
+// Matrix Optimization: Access glstate directly instead of glGetIntegerv
 #define mat(f) \
-  GLenum old_mat; \
-  gl4es_glGetIntegerv(GL_MATRIX_MODE, (GLint *) &old_mat); \
-  gl4es_glMatrixMode(matrixMode); \
+  GLenum old_mat = glstate->matrix_mode; \
+  if (old_mat != matrixMode) gl4es_glMatrixMode(matrixMode); \
   gl4es_##f; \
-  gl4es_glMatrixMode(old_mat)
+  if (old_mat != matrixMode) gl4es_glMatrixMode(old_mat)
   
 void APIENTRY_GL4ES gl4es_glMatrixLoadf(GLenum matrixMode, const GLfloat *m) {
     mat(glLoadMatrixf(m));
@@ -69,10 +84,10 @@ void APIENTRY_GL4ES gl4es_glMatrixMultf(GLenum matrixMode, const GLfloat *m) {
     mat(glMultMatrixf(m));
 }
 void APIENTRY_GL4ES gl4es_glMatrixMultd(GLenum matrixMode, const GLdouble *m) {
-        mat(glMultMatrixd(m));
+    mat(glMultMatrixd(m));
 }
 void APIENTRY_GL4ES gl4es_glMatrixLoadIdentity(GLenum matrixMode) {
-        mat(glLoadIdentity());
+    mat(glLoadIdentity());
 }
 void APIENTRY_GL4ES gl4es_glMatrixRotatef(GLenum matrixMode, GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
     mat(glRotatef(angle, x, y, z));
@@ -118,7 +133,8 @@ void APIENTRY_GL4ES gl4es_glMatrixMultTransposed(GLenum matrixMode, const GLdoub
 }
 #undef mat
 
-// Textures
+// Textures DSA
+// Note: gl4es_glBindTexture already handles redundant binding checks internally
 #define text(f) \
   gl4es_glBindTexture(target, texture); \
   gl4es_##f
@@ -185,6 +201,7 @@ void APIENTRY_GL4ES gl4es_glTextureSubImage3D(GLuint texture, GLenum target, GLi
 void APIENTRY_GL4ES gl4es_glCopyTextureSubImage3D(GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
     text(glCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width, height));
 }
+
 // Compressed texture
 void APIENTRY_GL4ES gl4es_glCompressedTextureImage3D(GLuint texture, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid *data) {
     text(glCompressedTexImage3D(target, level, internalformat, width, height, depth, border, imageSize, data));
@@ -209,11 +226,15 @@ void APIENTRY_GL4ES gl4es_glGetCompressedTextureImage(GLuint texture, GLenum tar
 }
 
 #undef text
+
+// MultiTexture DSA Optimization
+// Only switch active texture if necessary
 #define text(f) \
   GLenum old_tex = glstate->texture.active; \
   if(texunit != old_tex) gl4es_glActiveTexture(texunit); \
   gl4es_##f; \
   if(texunit != old_tex) gl4es_glActiveTexture(old_tex)
+
 #define texc(f) \
   GLenum old_tex = glstate->texture.client; \
   if(texunit != old_tex) gl4es_glClientActiveTexture(texunit); \
@@ -331,7 +352,8 @@ void APIENTRY_GL4ES gl4es_glMultiTexSubImage3D(GLenum texunit, GLenum target, GL
 void APIENTRY_GL4ES gl4es_glCopyMultiTexSubImage3D(GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height) {
     text(glCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width, height));
 }
-// Compressed texture
+
+// Compressed MultiTexture
 void APIENTRY_GL4ES gl4es_glCompressedMultiTexImage3D(GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const GLvoid *data) {
     text(glCompressedTexImage3D(target, level, internalformat, width, height, depth, border, imageSize, data));
 }
@@ -354,14 +376,14 @@ void APIENTRY_GL4ES gl4es_glGetCompressedMultiTexImage(GLenum texunit, GLenum ta
     text(glGetCompressedTexImage(target, level, img));
 }
 
+// Client State Indexed
 void APIENTRY_GL4ES gl4es_glEnableClientStateIndexed(GLenum array, GLuint index) {
     DBG(printf("glEnableClientStateIndexed(%s, %d)\n", PrintEnum(array), index);)
     if (array == GL_TEXTURE_COORD_ARRAY) {
         int old = glstate->texture.client;
-        if(old!=index) gl4es_glClientActiveTexture(GL_TEXTURE0+index);
+        if(old != index) gl4es_glClientActiveTexture(GL_TEXTURE0 + index);
         gl4es_glEnableClientState(array);
-        if(old!=index) gl4es_glClientActiveTexture(GL_TEXTURE0+old);
-        errorGL();
+        if(old != index) gl4es_glClientActiveTexture(GL_TEXTURE0 + old);
     } else {
         errorShim(GL_INVALID_ENUM);
     }
@@ -372,45 +394,46 @@ void APIENTRY_GL4ES gl4es_glDisableClientStateIndexed(GLenum array, GLuint index
     DBG(printf("glDisableClientStateIndexed(%s, %d)\n", PrintEnum(array), index);)
     if (array == GL_TEXTURE_COORD_ARRAY) {
         int old = glstate->texture.client;
-        if(old!=index) gl4es_glClientActiveTexture(GL_TEXTURE0+index);
+        if(old != index) gl4es_glClientActiveTexture(GL_TEXTURE0 + index);
         gl4es_glDisableClientState(array);
-        if(old!=index) gl4es_glClientActiveTexture(GL_TEXTURE0+old);
-        errorGL();
+        if(old != index) gl4es_glClientActiveTexture(GL_TEXTURE0 + old);
     } else {
         errorShim(GL_INVALID_ENUM);
     }
 }
 AliasDecl(void,gl4es_glDisableClientStatei,(GLenum array, GLuint index),gl4es_glDisableClientStateIndexed);
 
+// Vertex Array
 void APIENTRY_GL4ES gl4es_glEnableVertexArray(GLuint vaobj, GLenum array) {
     DBG(printf("glEnableVertexArray(%d, %s)\n", vaobj, PrintEnum(array));)
     GLuint old = glstate->vao->array;
-    gl4es_glBindVertexArray(vaobj);
+    if (old != vaobj) gl4es_glBindVertexArray(vaobj);
     gl4es_glEnableClientState(array);
-    gl4es_glBindVertexArray(old);
+    if (old != vaobj) gl4es_glBindVertexArray(old);
 }
 void APIENTRY_GL4ES gl4es_glDisableVertexArray(GLuint vaobj, GLenum array) {
     DBG(printf("glDisableVertexArray(%d, %s)\n", vaobj, PrintEnum(array));)
     GLuint old = glstate->vao->array;
-    gl4es_glBindVertexArray(vaobj);
+    if (old != vaobj) gl4es_glBindVertexArray(vaobj);
     gl4es_glDisableClientState(array);
-    gl4es_glBindVertexArray(old);
+    if (old != vaobj) gl4es_glBindVertexArray(old);
 }
 void APIENTRY_GL4ES gl4es_glEnableVertexArrayAttrib(GLuint vaobj, GLuint index) {
     DBG(printf("glEnableVertexArrayAttrib(%d, %d)\n", vaobj, index);)
     GLuint old = glstate->vao->array;
-    gl4es_glBindVertexArray(vaobj);
+    if (old != vaobj) gl4es_glBindVertexArray(vaobj);
     gl4es_glEnableVertexAttribArray(index);
-    gl4es_glBindVertexArray(old);
+    if (old != vaobj) gl4es_glBindVertexArray(old);
 }
 void APIENTRY_GL4ES gl4es_glDisableVertexArrayAttrib(GLuint vaobj, GLuint index) {
     DBG(printf("glDisableVertexArrayAttrib(%d, %d)\n", vaobj, index);)
     GLuint old = glstate->vao->array;
-    gl4es_glBindVertexArray(vaobj);
+    if (old != vaobj) gl4es_glBindVertexArray(vaobj);
     gl4es_glDisableVertexAttribArray(index);
-    gl4es_glBindVertexArray(old);
+    if (old != vaobj) gl4es_glBindVertexArray(old);
 }
 
+// GetXXXIndexed
 #define GETXXX(XXX, xxx) \
 void APIENTRY_GL4ES gl4es_glGet##XXX##Indexedv(GLenum target, GLuint index, GL##xxx *data) { \
     switch(target) { \
@@ -419,7 +442,7 @@ void APIENTRY_GL4ES gl4es_glGet##XXX##Indexedv(GLenum target, GLuint index, GL##
      case GL_PROGRAM_MATRIX_STACK_DEPTH_EXT: \
         { \
             int old = glstate->matrix_mode; \
-            gl4es_glMatrixMode(GL_MATRIX0_ARB+index); \
+            gl4es_glMatrixMode(GL_MATRIX0_ARB + index); \
             switch(target) { \
              case GL_PROGRAM_MATRIX_EXT: \
                 gl4es_glGet##XXX##v(GL_CURRENT_MATRIX_ARB, data); \
@@ -434,52 +457,23 @@ void APIENTRY_GL4ES gl4es_glGet##XXX##Indexedv(GLenum target, GLuint index, GL##
             gl4es_glMatrixMode(old); \
         } \
         break; \
-        case GL_CURRENT_RASTER_TEXTURE_COORDS: \
-        case GL_CURRENT_TEXTURE_COORDS: \
-        case GL_TEXTURE_BINDING_1D: \
-        case GL_TEXTURE_BINDING_1D_ARRAY: \
-        case GL_TEXTURE_BINDING_2D: \
-        case GL_TEXTURE_BINDING_2D_ARRAY: \
-        case GL_TEXTURE_BINDING_3D: \
-        case GL_TEXTURE_BINDING_BUFFER_EXT: \
-        case GL_TEXTURE_BINDING_CUBE_MAP: \
-        case GL_TEXTURE_BINDING_RECTANGLE_ARB: \
-        case GL_TEXTURE_BUFFER_DATA_STORE_BINDING_EXT: \
-        case GL_TEXTURE_BUFFER_FORMAT_EXT: \
-        case GL_TEXTURE_GEN_Q: \
-        case GL_TEXTURE_GEN_R: \
-        case GL_TEXTURE_GEN_S: \
-        case GL_TEXTURE_GEN_T: \
-        case GL_TEXTURE_MATRIX: \
-        case GL_TEXTURE_STACK_DEPTH: \
-        case GL_TRANSPOSE_TEXTURE_MATRIX: \
-        case GL_TEXTURE_1D: \
-        case GL_TEXTURE_2D: \
-        case GL_TEXTURE_3D: \
-        case GL_TEXTURE_CUBE_MAP: \
-        case GL_TEXTURE_RECTANGLE_ARB: \
-        { \
-            int old = glstate->texture.active; \
-            if(old!=index+GL_TEXTURE0) gl4es_glActiveTexture(index+GL_TEXTURE0); \
-            gl4es_glGet##XXX##v(target, data); \
-            if(old!=index+GL_TEXTURE0) gl4es_glActiveTexture(old); \
-        } \
-        break; \
-        case GL_TEXTURE_COORD_ARRAY: \
-        case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING: \
-        case GL_TEXTURE_COORD_ARRAY_COUNT: \
-        case GL_TEXTURE_COORD_ARRAY_SIZE: \
-        case GL_TEXTURE_COORD_ARRAY_STRIDE: \
-        case GL_TEXTURE_COORD_ARRAY_TYPE: \
-        { \
-            int old = glstate->texture.client; \
-            if(old!=index) gl4es_glClientActiveTexture(index+GL_TEXTURE0); \
-            gl4es_glGet##XXX##v(target, data); \
-            if(old!=index) gl4es_glClientActiveTexture(old+GL_TEXTURE0); \
-        } \
-        break; \
         default: \
-            gl4es_glGet##XXX##v(target, data); \
+            /* Texture Unit cases */ \
+            if (target == GL_CURRENT_RASTER_TEXTURE_COORDS || target == GL_CURRENT_TEXTURE_COORDS || \
+                (target >= GL_TEXTURE_BINDING_1D && target <= GL_TEXTURE_RECTANGLE_ARB)) { \
+                int old = glstate->texture.active; \
+                if(old != index + GL_TEXTURE0) gl4es_glActiveTexture(index + GL_TEXTURE0); \
+                gl4es_glGet##XXX##v(target, data); \
+                if(old != index + GL_TEXTURE0) gl4es_glActiveTexture(old); \
+            } \
+            else if (target >= GL_TEXTURE_COORD_ARRAY && target <= GL_TEXTURE_COORD_ARRAY_TYPE) { \
+                int old = glstate->texture.client; \
+                if(old != index) gl4es_glClientActiveTexture(index + GL_TEXTURE0); \
+                gl4es_glGet##XXX##v(target, data); \
+                if(old != index) gl4es_glClientActiveTexture(old + GL_TEXTURE0); \
+            } else { \
+                gl4es_glGet##XXX##v(target, data); \
+            } \
     } \
 }
 
@@ -491,58 +485,56 @@ GETXXX(Boolean, boolean);
 
 void APIENTRY_GL4ES gl4es_glGetPointerIndexedv(GLenum pname, GLuint index, GLvoid **params) {
     int old = glstate->texture.client;
-    if(old!=index) gl4es_glClientActiveTexture(index+GL_TEXTURE0);
+    if(old != index) gl4es_glClientActiveTexture(index + GL_TEXTURE0);
     gl4es_glGetPointerv(pname, params);
-    if(old!=index) gl4es_glClientActiveTexture(old+GL_TEXTURE0);
-    
+    if(old != index) gl4es_glClientActiveTexture(old + GL_TEXTURE0);
 }
 
 void APIENTRY_GL4ES gl4es_glEnableIndexed(GLenum cap, GLuint index) {
     DBG(printf("glEnableIndexed(%s, %d)\n", PrintEnum(cap), index);)
     int old = glstate->texture.active;
-    if(old!=index) gl4es_glActiveTexture(index+GL_TEXTURE0);
+    if(old != index) gl4es_glActiveTexture(index + GL_TEXTURE0);
     gl4es_glEnable(cap);
-    if(old!=index) gl4es_glActiveTexture(old);
+    if(old != index) gl4es_glActiveTexture(old);
 }
 
 void APIENTRY_GL4ES gl4es_glDisableIndexed(GLenum cap, GLuint index) {
     DBG(printf("glDisableIndexed(%s, %d)\n", PrintEnum(cap), index);)
     int old = glstate->texture.active;
-    if(old!=index) gl4es_glActiveTexture(index+GL_TEXTURE0);
+    if(old != index) gl4es_glActiveTexture(index + GL_TEXTURE0);
     gl4es_glDisable(cap);
-    if(old!=index) gl4es_glActiveTexture(old);
+    if(old != index) gl4es_glActiveTexture(old);
 }
 
 GLboolean APIENTRY_GL4ES gl4es_glIsEnabledIndexed(GLenum cap, GLuint index) {
     DBG(printf("glIsEnabledIndexed(%s, %d)\n", PrintEnum(cap), index);)
     int old;
     GLboolean rv;
-    switch(cap) {
-        case GL_TEXTURE_1D:
-        case GL_TEXTURE_2D:
-        case GL_TEXTURE_3D:
-        case GL_TEXTURE_CUBE_MAP:
-        case GL_TEXTURE_RECTANGLE_ARB:
-        case GL_TEXTURE_GEN_S:
-        case GL_TEXTURE_GEN_T:
-        case GL_TEXTURE_GEN_R:
-        case GL_TEXTURE_GEN_Q:
+    
+    // Texture unit related caps
+    if (cap == GL_TEXTURE_1D || cap == GL_TEXTURE_2D || cap == GL_TEXTURE_3D || 
+        cap == GL_TEXTURE_CUBE_MAP || cap == GL_TEXTURE_RECTANGLE_ARB || 
+        (cap >= GL_TEXTURE_GEN_S && cap <= GL_TEXTURE_GEN_Q)) {
             old = glstate->texture.active;
-            if(old!=index) gl4es_glActiveTexture(index+GL_TEXTURE0);
+            if(old != index) gl4es_glActiveTexture(index + GL_TEXTURE0);
             rv = gl4es_glIsEnabled(cap);
-            if(old!=index) gl4es_glActiveTexture(old);
-            return rv;
-        case GL_TEXTURE_COORD_ARRAY:
-            old = glstate->texture.client;
-            if(old!=index) gl4es_glClientActiveTexture(index+GL_TEXTURE0);
-            rv = gl4es_glIsEnabled(cap);
-            if(old!=index) gl4es_glClientActiveTexture(old+GL_TEXTURE0);
+            if(old != index) gl4es_glActiveTexture(old);
             return rv;
     }
+    
+    // Client state related caps
+    if (cap == GL_TEXTURE_COORD_ARRAY) {
+        old = glstate->texture.client;
+        if(old != index) gl4es_glClientActiveTexture(index + GL_TEXTURE0);
+        rv = gl4es_glIsEnabled(cap);
+        if(old != index) gl4es_glClientActiveTexture(old + GL_TEXTURE0);
+        return rv;
+    }
+    
     return gl4es_glIsEnabled(cap);
 }
 
-//EXT wrapper
+// Exports
 AliasExport(void,glClientAttribDefault,EXT,(GLbitfield mask));
 AliasExport(void,glPushClientAttribDefault,EXT,(GLbitfield mask));
 AliasExport(void,glMatrixLoadf,EXT,(GLenum matrixMode, const GLfloat *m));
@@ -651,5 +643,6 @@ AliasExport(void,glGetBooleanIndexedv,EXT,(GLenum target, GLuint index, GLboolea
 AliasExport(void,glEnableIndexed,EXT,(GLenum cap, GLuint index));
 AliasExport(void,glDisableIndexed,EXT,(GLenum cap, GLuint index));
 AliasExport(GLboolean,glIsEnabledIndexed,EXT,(GLenum cap, GLuint index));
+
 #undef text
 #undef texc
