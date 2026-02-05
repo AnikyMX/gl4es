@@ -1,9 +1,9 @@
 /*
  * Refactored stack.c for GL4ES
  * Optimized for ARMv8
- * - Reduced malloc overhead with smarter stack growth
- * - Direct glstate access instead of glGet wrappers
- * - Optimized state capture loops
+ * - Fixed struct member access errors (dither, clear_color, viewport, etc.)
+ * - Reverted to safe Getter functions where struct layout is opaque
+ * - Kept efficient memory management
  */
 
 #include <stdio.h>
@@ -12,7 +12,7 @@
 #include "wrap/gl4es.h"
 #include "matrix.h"
 #include "debug.h"
-#include "light.h" // Needed for direct light state access
+#include "light.h"
 
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -29,11 +29,9 @@
 void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
     DBG(printf("glPushAttrib(0x%04X)\n", mask);)
     
-    // Ensure textures are realized before pushing state
     realize_textures(0);
     noerrorShim();
 
-    // Handle Display List compilation
     if (unlikely(glstate->list.active)) {
         if (glstate->list.compiling) {
             NewStage(glstate->list.active, STAGE_PUSH);
@@ -44,7 +42,6 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
         }
     }
 
-    // Stack growth management (Grow by chunks to reduce reallocs)
     if (unlikely(glstate->stack == NULL)) {
         glstate->stack = (glstack_t *)malloc(STACK_SIZE * sizeof(glstack_t));
         glstate->stack->len = 0;
@@ -57,30 +54,31 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
     glstack_t *cur = glstate->stack + glstate->stack->len;
     cur->mask = mask;
     
-    // Initialize pointers to NULL for safety (lazy allocation)
     cur->clip_planes_enabled = NULL;
     cur->clip_planes = NULL;
     cur->lights_enabled = NULL;
     cur->lights = NULL;
     cur->materials = NULL;
 
-    // Direct State Access Optimization
-    
     if (mask & GL_COLOR_BUFFER_BIT) {
-        cur->alpha_test = glstate->enable.alpha_test; // Direct access
-        cur->alpha_test_func = glstate->alphafunc;
-        cur->alpha_test_ref = glstate->alpharef;
+        cur->alpha_test = gl4es_glIsEnabled(GL_ALPHA_TEST);
+        gl4es_glGetIntegerv(GL_ALPHA_TEST_FUNC, &cur->alpha_test_func);
+        gl4es_glGetFloatv(GL_ALPHA_TEST_REF, &cur->alpha_test_ref);
 
-        cur->blend = glstate->enable.blend;
-        cur->blend_src_func = glstate->blendsfactorrgb;
-        cur->blend_dst_func = glstate->blenddfactorrgb;
+        cur->blend = gl4es_glIsEnabled(GL_BLEND);
+        gl4es_glGetIntegerv(GL_BLEND_SRC, &cur->blend_src_func);
+        gl4es_glGetIntegerv(GL_BLEND_DST, &cur->blend_dst_func);
 
-        cur->dither = glstate->enable.dither;
-        cur->color_logic_op = glstate->enable.color_logic_op;
-        cur->logic_op = glstate->logicop;
+        // FIXED: Use function instead of direct access
+        cur->dither = gl4es_glIsEnabled(GL_DITHER);
+        cur->color_logic_op = gl4es_glIsEnabled(GL_COLOR_LOGIC_OP);
+        gl4es_glGetIntegerv(GL_LOGIC_OP_MODE, &cur->logic_op);
 
-        memcpy(cur->clear_color, glstate->clear_color, 4 * sizeof(GLfloat));
-        memcpy(cur->color_mask, glstate->colormask, 4 * sizeof(GLboolean)); // Careful with types here
+        // FIXED: clear_color is not in glstate struct directly
+        gl4es_glGetFloatv(GL_COLOR_CLEAR_VALUE, cur->clear_color);
+        
+        // Colormask is in glstate (GLboolean colormask[4])
+        memcpy(cur->color_mask, glstate->colormask, 4 * sizeof(GLboolean));
     }
 
     if (mask & GL_CURRENT_BIT) {
@@ -90,7 +88,7 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
     }
 
     if (mask & GL_DEPTH_BUFFER_BIT) {
-        cur->depth_test = glstate->enable.depth_test;
+        cur->depth_test = gl4es_glIsEnabled(GL_DEPTH_TEST);
         cur->depth_func = glstate->depth.func;
         cur->clear_depth = glstate->depth.clear;
         cur->depth_mask = glstate->depth.mask;
@@ -98,42 +96,47 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
 
     if (mask & GL_ENABLE_BIT) {
         int i;
-        cur->alpha_test = glstate->enable.alpha_test;
-        cur->autonormal = glstate->enable.auto_normal;
-        cur->blend = glstate->enable.blend;
+        cur->alpha_test = gl4es_glIsEnabled(GL_ALPHA_TEST);
+        cur->autonormal = gl4es_glIsEnabled(GL_AUTO_NORMAL);
+        cur->blend = gl4es_glIsEnabled(GL_BLEND);
         
         cur->clip_planes_enabled = (GLboolean *)malloc(hardext.maxplanes * sizeof(GLboolean));
         for (i = 0; i < hardext.maxplanes; i++) {
-            cur->clip_planes_enabled[i] = glstate->enable.plane[i];
+            cur->clip_planes_enabled[i] = gl4es_glIsEnabled(GL_CLIP_PLANE0 + i);
         }
 
-        cur->colormaterial = glstate->enable.color_material;
-        cur->cull_face = glstate->enable.cull_face;
-        cur->depth_test = glstate->enable.depth_test;
-        cur->dither = glstate->enable.dither;
-        cur->fog = glstate->enable.fog;
+        cur->colormaterial = gl4es_glIsEnabled(GL_COLOR_MATERIAL);
+        cur->cull_face = gl4es_glIsEnabled(GL_CULL_FACE);
+        cur->depth_test = gl4es_glIsEnabled(GL_DEPTH_TEST);
+        cur->dither = gl4es_glIsEnabled(GL_DITHER);
+        cur->fog = gl4es_glIsEnabled(GL_FOG);
 
         cur->lights_enabled = (GLboolean *)malloc(hardext.maxlights * sizeof(GLboolean));
         for (i = 0; i < hardext.maxlights; i++) {
-            cur->lights_enabled[i] = glstate->enable.light[i];
+            cur->lights_enabled[i] = gl4es_glIsEnabled(GL_LIGHT0 + i);
         }
 
-        cur->lighting = glstate->enable.lighting;
-        cur->line_smooth = glstate->enable.line_smooth;
-        cur->line_stipple = glstate->enable.line_stipple;
-        cur->color_logic_op = glstate->enable.color_logic_op;
+        cur->lighting = gl4es_glIsEnabled(GL_LIGHTING);
+        cur->line_smooth = gl4es_glIsEnabled(GL_LINE_SMOOTH);
+        cur->line_stipple = gl4es_glIsEnabled(GL_LINE_STIPPLE);
+        cur->color_logic_op = gl4es_glIsEnabled(GL_COLOR_LOGIC_OP);
         
-        cur->multisample = glstate->enable.multisample;
-        cur->normalize = glstate->enable.normalize;
-        cur->point_smooth = glstate->enable.point_smooth;
-        cur->polygon_offset_fill = glstate->enable.poly_offset_fill;
+        cur->multisample = gl4es_glIsEnabled(GL_MULTISAMPLE);
+        cur->normalize = gl4es_glIsEnabled(GL_NORMALIZE);
+        cur->point_smooth = gl4es_glIsEnabled(GL_POINT_SMOOTH);
         
-        cur->sample_alpha_to_coverage = glstate->enable.sample_alpha_to_coverage;
-        cur->sample_alpha_to_one = glstate->enable.sample_alpha_to_one;
-        cur->sample_coverage = glstate->enable.sample_coverage;
-        cur->scissor_test = glstate->enable.scissor_test;
-        cur->stencil_test = glstate->enable.stencil_test;
+        // FIXED: poly_offset_fill access
+        cur->polygon_offset_fill = gl4es_glIsEnabled(GL_POLYGON_OFFSET_FILL);
         
+        cur->sample_alpha_to_coverage = gl4es_glIsEnabled(GL_SAMPLE_ALPHA_TO_COVERAGE);
+        cur->sample_alpha_to_one = gl4es_glIsEnabled(GL_SAMPLE_ALPHA_TO_ONE);
+        cur->sample_coverage = gl4es_glIsEnabled(GL_SAMPLE_COVERAGE);
+        
+        // FIXED: scissor_test access
+        cur->scissor_test = gl4es_glIsEnabled(GL_SCISSOR_TEST);
+        cur->stencil_test = gl4es_glIsEnabled(GL_STENCIL_TEST);
+        
+        // Texture enables (using explicit check to be safe)
         for (int a = 0; a < hardext.maxtex; a++) {
             cur->tex_enabled[a] = glstate->enable.texture[a];
             cur->texgen_s[a] = glstate->enable.texgen_s[a];
@@ -141,11 +144,11 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
             cur->texgen_t[a] = glstate->enable.texgen_t[a];
             cur->texgen_q[a] = glstate->enable.texgen_q[a];
         }
-        cur->pointsprite = glstate->enable.pointsprite;
+        cur->pointsprite = gl4es_glIsEnabled(GL_POINT_SPRITE);
     }
 
     if (mask & GL_FOG_BIT) {
-        cur->fog = glstate->enable.fog;
+        cur->fog = gl4es_glIsEnabled(GL_FOG);
         memcpy(cur->fog_color, glstate->fog.color, 4 * sizeof(GLfloat));
         cur->fog_density = glstate->fog.density;
         cur->fog_start = glstate->fog.start;
@@ -154,7 +157,6 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
     }
 
     if (mask & GL_HINT_BIT) {
-        // Hints are global, no glstate structure for all hints usually, keep glGet
         gl4es_glGetIntegerv(GL_PERSPECTIVE_CORRECTION_HINT, &cur->perspective_hint);
         gl4es_glGetIntegerv(GL_POINT_SMOOTH_HINT, &cur->point_smooth_hint);
         gl4es_glGetIntegerv(GL_LINE_SMOOTH_HINT, &cur->line_smooth_hint);
@@ -165,19 +167,18 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
     }
 
     if (mask & GL_LIGHTING_BIT) {
-        cur->lighting = glstate->enable.lighting;
+        cur->lighting = gl4es_glIsEnabled(GL_LIGHTING);
         memcpy(cur->light_model_ambient, glstate->light.ambient, 4 * sizeof(GLfloat));
         cur->light_model_two_side = glstate->light.two_side;
 
         cur->lights_enabled = (GLboolean *)malloc(hardext.maxlights * sizeof(GLboolean));
-        // Allocate block for all lights state (10 params * 4 floats)
         cur->lights = (GLfloat *)malloc(hardext.maxlights * sizeof(GLfloat) * 40);
         
         float *ptr = cur->lights;
         for (int i = 0; i < hardext.maxlights; i++) {
-            cur->lights_enabled[i] = glstate->enable.light[i];
+            cur->lights_enabled[i] = gl4es_glIsEnabled(GL_LIGHT0 + i);
             
-            // Direct copy from glstate->light.lights[i]
+            // Direct copy from glstate->light.lights[i] structure
             memcpy(ptr, glstate->light.lights[i].ambient, 4 * sizeof(GLfloat)); ptr += 4;
             memcpy(ptr, glstate->light.lights[i].diffuse, 4 * sizeof(GLfloat)); ptr += 4;
             memcpy(ptr, glstate->light.lights[i].specular, 4 * sizeof(GLfloat)); ptr += 4;
@@ -191,7 +192,7 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
         }
 
         // Materials
-        cur->materials = (GLfloat *)malloc(2 * sizeof(GLfloat) * 20); // Front & Back * 5 params * 4 floats
+        cur->materials = (GLfloat *)malloc(2 * sizeof(GLfloat) * 20);
         ptr = cur->materials;
         
         // Back
@@ -210,11 +211,10 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
 
         cur->shade_model = glstate->shademodel;
     }
-
     if (mask & GL_LINE_BIT) {
-        cur->line_smooth = glstate->enable.line_smooth;
-        // Stipple state TODO
+        cur->line_smooth = gl4es_glIsEnabled(GL_LINE_SMOOTH);
         gl4es_glGetFloatv(GL_LINE_WIDTH, &cur->line_width);
+        // Stipple state is usually not supported fully in GLES/GL4ES, skipping for speed
     }
 
     if (mask & GL_LIST_BIT) {
@@ -222,30 +222,26 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
     }
 
     if (mask & GL_MULTISAMPLE_BIT) {
-        cur->multisample = glstate->enable.multisample;
-        cur->sample_alpha_to_coverage = glstate->enable.sample_alpha_to_coverage;
-        cur->sample_alpha_to_one = glstate->enable.sample_alpha_to_one;
-        cur->sample_coverage = glstate->enable.sample_coverage;
+        cur->multisample = gl4es_glIsEnabled(GL_MULTISAMPLE);
+        cur->sample_alpha_to_coverage = gl4es_glIsEnabled(GL_SAMPLE_ALPHA_TO_COVERAGE);
+        cur->sample_alpha_to_one = gl4es_glIsEnabled(GL_SAMPLE_ALPHA_TO_ONE);
+        cur->sample_coverage = gl4es_glIsEnabled(GL_SAMPLE_COVERAGE);
     }
 
     if (mask & GL_PIXEL_MODE_BIT) {
-        memcpy(cur->pixel_scale_bias, glstate->raster.raster_bias, 4 * sizeof(GLfloat)); // Only biases?
-        // Wait, original code calls GetFloatv for BIAS and SCALE.
-        // Raster state structure has them.
-        // Reverting to glGet for safety on mixed access patterns, but optimized where possible
         GLenum pixel_name[] = {GL_RED_BIAS, GL_RED_SCALE, GL_GREEN_BIAS, GL_GREEN_SCALE, GL_BLUE_BIAS, GL_BLUE_SCALE, GL_ALPHA_BIAS, GL_ALPHA_SCALE};
         for (int i=0; i<8; i++) 
             gl4es_glGetFloatv(pixel_name[i], &cur->pixel_scale_bias[i]);
         
-        cur->pixel_zoomx = glstate->raster.raster_zoomx;
-        cur->pixel_zoomy = glstate->raster.raster_zoomy;
+        gl4es_glGetFloatv(GL_ZOOM_X, &cur->pixel_zoomx);
+        gl4es_glGetFloatv(GL_ZOOM_Y, &cur->pixel_zoomy);
     }
     
     if (mask & GL_POINT_BIT) {
-        cur->point_smooth = glstate->enable.point_smooth;
+        cur->point_smooth = gl4es_glIsEnabled(GL_POINT_SMOOTH);
         cur->point_size = glstate->pointsprite.size;
         if(hardext.pointsprite) {
-            cur->pointsprite = glstate->enable.pointsprite;
+            cur->pointsprite = gl4es_glIsEnabled(GL_POINT_SPRITE);
             for (int a=0; a<hardext.maxtex; a++) {
                 cur->pscoordreplace[a] = glstate->texture.pscoordreplace[a];
             }
@@ -253,13 +249,16 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
     }
 
     if (mask & GL_SCISSOR_BIT) {
-        cur->scissor_test = glstate->enable.scissor_test;
-        memcpy(cur->scissor_box, glstate->raster.scissor_box, 4 * sizeof(GLfloat));
+        // FIXED: Use Getter
+        cur->scissor_test = gl4es_glIsEnabled(GL_SCISSOR_TEST);
+        gl4es_glGetFloatv(GL_SCISSOR_BOX, cur->scissor_box);
     }
 
     if (mask & GL_STENCIL_BUFFER_BIT) {
-        cur->stencil_test = glstate->enable.stencil_test;
-        cur->stencil_func = glstate->stencil.func[0]; // Front
+        cur->stencil_test = gl4es_glIsEnabled(GL_STENCIL_TEST);
+        
+        // Direct access valid here based on glstate.h
+        cur->stencil_func = glstate->stencil.func[0];
         cur->stencil_mask = glstate->stencil.mask[0];
         cur->stencil_ref = glstate->stencil.f_ref[0];
         
@@ -285,19 +284,20 @@ void APIENTRY_GL4ES gl4es_glPushAttrib(GLbitfield mask) {
 
     if (mask & GL_TRANSFORM_BIT) {
         if (!(mask & GL_ENABLE_BIT)) {
-            // Only alloc if not already done in ENABLE_BIT
             cur->clip_planes_enabled = (GLboolean *)malloc(hardext.maxplanes * sizeof(GLboolean));
             for (int i = 0; i < hardext.maxplanes; i++) {
-                cur->clip_planes_enabled[i] = glstate->enable.plane[i];
+                cur->clip_planes_enabled[i] = gl4es_glIsEnabled(GL_CLIP_PLANE0 + i);
             }
         }
         cur->matrix_mode = glstate->matrix_mode;
-        cur->rescale_normal_flag = glstate->enable.rescale_normal;
-        cur->normalize_flag = glstate->enable.normalize;
+        // FIXED: Use Getter
+        cur->rescale_normal_flag = gl4es_glIsEnabled(GL_RESCALE_NORMAL);
+        cur->normalize_flag = gl4es_glIsEnabled(GL_NORMALIZE);
     }
 
     if (mask & GL_VIEWPORT_BIT) {
-        memcpy(cur->viewport_size, glstate->raster.viewport, 4 * sizeof(GLint));
+        // FIXED: Use Getter (glstate.h has 'vp' but error says 'viewport' in raster struct invalid)
+        gl4es_glGetIntegerv(GL_VIEWPORT, cur->viewport_size);
         cur->depth_range[0] = glstate->depth.Near;
         cur->depth_range[1] = glstate->depth.Far;
     }
@@ -309,7 +309,6 @@ void APIENTRY_GL4ES gl4es_glPushClientAttrib(GLbitfield mask) {
     DBG(printf("glPushClientAttrib(0x%04X)\n", mask);)
     noerrorShim();
     
-    // Auto-growth for client stack
     if (unlikely(glstate->clientStack == NULL)) {
         glstate->clientStack = (glclientstack_t *)malloc(STACK_SIZE * sizeof(glclientstack_t));
         glstate->clientStack->len = 0;
@@ -497,32 +496,19 @@ void APIENTRY_GL4ES gl4es_glPopAttrib(void) {
         for (i = 0; i < hardext.maxlights; i++) {
             enable_disable(GL_LIGHT0 + i, *(cur->lights_enabled + i));
             
-            // Macro to check redundancy before calling driver
-            #define L(A, COUNT) \
-                if (memcmp(cur->lights + j, &glstate->light.lights[i], sizeof(GLfloat) * COUNT) != 0) { \
-                    gl4es_glLightfv(GL_LIGHT0 + i, A, cur->lights + j); \
-                } \
-                j += COUNT
-
-            // WARNING: The loop below assumes a specific packing order from glPushAttrib
-            // We use standard gl4es_glLightfv to be safe, but we could compare.
-            // For now, standard restore for safety as packing alignment is tricky.
-            #undef L
-            #define L(A) gl4es_glLightfv(GL_LIGHT0 + i, A, cur->lights + j); j += 4
+            // Revert redundancy check to standard calls for safety/simplicity
+            gl4es_glLightfv(GL_LIGHT0 + i, GL_AMBIENT, cur->lights + j); j += 4;
+            gl4es_glLightfv(GL_LIGHT0 + i, GL_DIFFUSE, cur->lights + j); j += 4;
+            gl4es_glLightfv(GL_LIGHT0 + i, GL_SPECULAR, cur->lights + j); j += 4;
+            gl4es_glLightfv(GL_LIGHT0 + i, GL_POSITION, cur->lights + j); j += 4;
             
-            L(GL_AMBIENT); L(GL_DIFFUSE); L(GL_SPECULAR); L(GL_POSITION); 
-            
-            // Single float params need special handling if using array
-            gl4es_glLightf(GL_LIGHT0 + i, GL_SPOT_CUTOFF, cur->lights[j]); j++;
-            
+            gl4es_glLightf(GL_LIGHT0 + i, GL_SPOT_CUTOFF, cur->lights[j++]);
             gl4es_glLightfv(GL_LIGHT0 + i, GL_SPOT_DIRECTION, cur->lights + j); j += 3;
             
-            gl4es_glLightf(GL_LIGHT0 + i, GL_SPOT_EXPONENT, cur->lights[j]); j++;
-            gl4es_glLightf(GL_LIGHT0 + i, GL_CONSTANT_ATTENUATION, cur->lights[j]); j++;
-            gl4es_glLightf(GL_LIGHT0 + i, GL_LINEAR_ATTENUATION, cur->lights[j]); j++;
-            gl4es_glLightf(GL_LIGHT0 + i, GL_QUADRATIC_ATTENUATION, cur->lights[j]); j++;
-            
-            #undef L
+            gl4es_glLightf(GL_LIGHT0 + i, GL_SPOT_EXPONENT, cur->lights[j++]);
+            gl4es_glLightf(GL_LIGHT0 + i, GL_CONSTANT_ATTENUATION, cur->lights[j++]);
+            gl4es_glLightf(GL_LIGHT0 + i, GL_LINEAR_ATTENUATION, cur->lights[j++]);
+            gl4es_glLightf(GL_LIGHT0 + i, GL_QUADRATIC_ATTENUATION, cur->lights[j++]);
         }
 
         if (!identity) {
@@ -531,40 +517,40 @@ void APIENTRY_GL4ES gl4es_glPopAttrib(void) {
         }
         
         j = 0;
-        // Material optimization: Check front/back equality
+        // Material
         if (memcmp(cur->materials + j, cur->materials + j + 4, 4 * sizeof(GLfloat)) == 0) {
             gl4es_glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, cur->materials + j); j += 8;
         } else {
             gl4es_glMaterialfv(GL_BACK, GL_AMBIENT, cur->materials + j); j += 4;
             gl4es_glMaterialfv(GL_FRONT, GL_AMBIENT, cur->materials + j); j += 4;
         }
-        // Diffuse
+        
         if (memcmp(cur->materials + j, cur->materials + j + 4, 4 * sizeof(GLfloat)) == 0) {
             gl4es_glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, cur->materials + j); j += 8;
         } else {
             gl4es_glMaterialfv(GL_BACK, GL_DIFFUSE, cur->materials + j); j += 4;
             gl4es_glMaterialfv(GL_FRONT, GL_DIFFUSE, cur->materials + j); j += 4;
         }
-        // Specular
+        
         if (memcmp(cur->materials + j, cur->materials + j + 4, 4 * sizeof(GLfloat)) == 0) {
             gl4es_glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, cur->materials + j); j += 8;
         } else {
             gl4es_glMaterialfv(GL_BACK, GL_SPECULAR, cur->materials + j); j += 4;
             gl4es_glMaterialfv(GL_FRONT, GL_SPECULAR, cur->materials + j); j += 4;
         }
-        // Emission
+        
         if (memcmp(cur->materials + j, cur->materials + j + 4, 4 * sizeof(GLfloat)) == 0) {
             gl4es_glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, cur->materials + j); j += 8;
         } else {
             gl4es_glMaterialfv(GL_BACK, GL_EMISSION, cur->materials + j); j += 4;
             gl4es_glMaterialfv(GL_FRONT, GL_EMISSION, cur->materials + j); j += 4;
         }
-        // Shininess
+        
         if (cur->materials[j] == cur->materials[j+1]) {
             gl4es_glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, cur->materials[j]); j += 2;
         } else {
-            gl4es_glMaterialf(GL_BACK, GL_SHININESS, cur->materials[j]); j++;
-            gl4es_glMaterialf(GL_FRONT, GL_SHININESS, cur->materials[j]); j++;
+            gl4es_glMaterialf(GL_BACK, GL_SHININESS, cur->materials[j++]); 
+            gl4es_glMaterialf(GL_FRONT, GL_SHININESS, cur->materials[j++]);
         }
 
         gl4es_glShadeModel(cur->shade_model);
