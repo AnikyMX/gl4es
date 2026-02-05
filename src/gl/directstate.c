@@ -1,9 +1,9 @@
 /*
  * Refactored directstate.c for GL4ES
  * Optimized for ARMv8
- * - Fast Matrix Mode switching (avoiding glGetIntegerv)
+ * - Fixed missing headers (hardext.h, glstate.h)
+ * - Fast Matrix Mode switching
  * - Optimized Texture State saving/restoring
- * - Branch Prediction for DSA operations
  */
 
 #include "directstate.h"
@@ -13,6 +13,8 @@
 #include "stack.h"
 #include "texgen.h"
 #include "debug.h"
+#include "glstate.h"       // FIXED: Added for glstate struct
+#include "../glx/hardext.h" // FIXED: Added for hardext struct
 
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -51,7 +53,7 @@ void APIENTRY_GL4ES gl4es_glClientAttribDefault(GLbitfield mask) {
         enable_disable(GL_COLOR_ARRAY, false);
         enable_disable(GL_SECONDARY_COLOR_ARRAY, false);
         
-        // Unroll loop for common texture units (usually < 8)
+        // Unroll loop for common texture units
         for (int a = 0; a < hardext.maxtex; a++) {
            gl4es_glClientActiveTexture(GL_TEXTURE0 + a);
            enable_disable(GL_TEXTURE_COORD_ARRAY, false);
