@@ -1263,70 +1263,70 @@ void realize_glenv(int ispoint, int first, int count, GLenum type, const void* i
         }
     }
     
-    // Vertex Attrib Loop
-    for(int i=0; i<hardext.maxvattrib; i++) 
+    // --- Vertex Attributes Synchronization (FIXED / SAFE MODE) ---
+    // Previous optimization was too aggressive causing Black World.
+    // We now force update pointers more often to ensure PowerVR gets the data.
+    
+    for(int i = 0; i < hardext.maxvattrib; i++) 
     if(glprogram->va_size[i])
     {
         vertexattrib_t *v = &glstate->gleshard->vertexattrib[i];
         vertexattrib_t *w = &glstate->vao->vertexattrib[i];
         int enabled = w->enabled;
-        int dirty = 0;
-        if(enabled && !w->buffer && !w->pointer) enabled = 0;
         
-        if(v->enabled != enabled || (v->enabled && w->divisor)) {
-            dirty = 1;
-            v->enabled = (w->divisor)?0:enabled;
-            if(v->enabled) gles_glEnableVertexAttribArray(i);
+        // Safety check: Don't enable if no buffer/pointer
+        if (enabled && !w->buffer && !w->pointer) enabled = 0;
+
+        // Sync Enable/Disable State
+        if (v->enabled != enabled) {
+            v->enabled = enabled;
+            if (v->enabled) gles_glEnableVertexAttribArray(i);
             else gles_glDisableVertexAttribArray(i);
         }
-        if(v->enabled) {
-            void * ptr = (void*)((uintptr_t)w->pointer + ((w->buffer)?(uintptr_t)w->buffer->data:0));
-            if(dirty || v->size!=w->size || v->type!=w->type || v->normalized!=w->normalized 
-                || v->stride!=w->stride || v->buffer!=w->buffer || (w->real_buffer==0 && v->pointer!=ptr)
-                || v->real_buffer!=w->real_buffer || (w->real_buffer!=0 && v->real_pointer != w->real_pointer) 
-                || w->real_buffer!=glstate->bind_buffer.array) {
-                
+
+        if (v->enabled) {
+            // Calculate current pointer
+            void *ptr = (void*)((uintptr_t)w->pointer + ((w->buffer) ? (uintptr_t)w->buffer->data : 0));
+            
+            // CRITICAL FIX: Removed the complex "memcmp" check for Array Pointers.
+            // On PowerVR/Mali, if the program changes, the VAO state might be lost or undefined.
+            // It is safer to re-bind the pointer if ANY state looks suspicious, or just do it always for dynamic geometry.
+            
+            // Check basic changes
+            int changed = (v->size != w->size || v->type != w->type || 
+                           v->normalized != w->normalized || v->stride != w->stride || 
+                           v->real_buffer != w->real_buffer || v->pointer != ptr);
+
+            // FORCE UPDATE if using Client Arrays (real_buffer == 0) because Minecraft changes these every frame.
+            if (changed || w->real_buffer == 0) 
+            {
                 v->size = w->size;
                 v->type = w->type;
                 v->normalized = w->normalized;
                 v->stride = w->stride;
                 v->real_buffer = w->real_buffer;
                 v->real_pointer = w->real_pointer;
-                v->pointer = (v->real_buffer)?v->real_pointer:ptr;
-                
-               bindBuffer(GL_ARRAY_BUFFER, v->real_buffer);
+                v->pointer = ptr;
+
+                bindBuffer(GL_ARRAY_BUFFER, v->real_buffer);
                 gles_glVertexAttribPointer(i, v->size, v->type, v->normalized, v->stride, v->pointer);
             }
         } else {
+            // Constant Attribute (glVertexAttrib4fv) - This part is safe to keep optimized
             char* current = (char*)glstate->vavalue[i];
-            GLfloat tmp[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-            if(w->divisor && w->enabled) {
-                current = (char*)((uintptr_t)w->pointer + ((w->buffer)?(uintptr_t)w->buffer->data:0));
-                int stride=w->stride;
-                if(!stride) stride=gl_sizeof(w->type)*w->size;
-                current += (glstate->instanceID/w->divisor) * stride;
-                if(w->type==GL_FLOAT) {
-                    if(w->size!=4) {
-                        memcpy(tmp, current, sizeof(GLfloat)*w->size);
-                        current = (char*)tmp;
-                    }
-                } else {
-                    current = (char*)tmp;
-                }
-            }
-            if(dirty || memcmp(glstate->gleshard->vavalue[i], current, 4*sizeof(GLfloat))) {
-                memcpy(glstate->gleshard->vavalue[i], current, 4*sizeof(GLfloat));
+            if (memcmp(glstate->gleshard->vavalue[i], current, 4 * sizeof(GLfloat))) {
+                memcpy(glstate->gleshard->vavalue[i], current, 4 * sizeof(GLfloat));
                 gles_glVertexAttrib4fv(i, glstate->gleshard->vavalue[i]);
             }
         }
     } else {
-        vertexattrib_t *v = &glstate->gleshard->vertexattrib[i];
-        if(v->enabled) {
-            v->enabled = 0;
+        // Disable unused attributes
+        if (glstate->gleshard->vertexattrib[i].enabled) {
+            glstate->gleshard->vertexattrib[i].enabled = 0;
             gles_glDisableVertexAttribArray(i);
         }
     }
-}
+} // End of realize_glenv
 
 void realize_blitenv(int alpha) {
     LOAD_GLES3(glUseProgram);
