@@ -17,6 +17,11 @@
 #include "texgen.h"
 #include "render.h"
 
+#ifndef likely
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#endif
+
 /* return 1 if failed, 2 if succeed */
 typedef struct array2vbo_s {
     uintptr_t   real_base;
