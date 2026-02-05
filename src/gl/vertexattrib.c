@@ -1,9 +1,9 @@
 /*
  * Refactored vertexattrib.c for GL4ES
  * Optimized for ARMv8
+ * - Added GL_VERTEX_ATTRIB_ARRAY_INTEGER definition fallback
  * - Redundant state filtering
  * - Branch prediction optimization
- * - Fast path for attribute queries
  */
 
 #include "vertexattrib.h"
@@ -16,6 +16,11 @@
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
+#endif
+
+// Fallback definition if missing in GLES headers
+#ifndef GL_VERTEX_ATTRIB_ARRAY_INTEGER
+#define GL_VERTEX_ATTRIB_ARRAY_INTEGER 0x88FD
 #endif
 
 //#define DEBUG
@@ -137,8 +142,6 @@ void APIENTRY_GL4ES gl4es_glDisableVertexAttribArray(GLuint index) {
 }
 
 void APIENTRY_GL4ES gl4es_glVertexAttrib4f(GLuint index, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3) {
-    // Avoid FLUSH_BEGINEND if redundant? No, immediate mode might need it.
-    // But we can check redundancy.
     if (unlikely(index >= hardext.maxvattrib)) {
         errorShim(GL_INVALID_VALUE);
         return;
