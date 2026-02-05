@@ -10,14 +10,6 @@
 #include "init.h"
 #include "loader.h"
 
-#include <dlfcn.h>
-#include <EGL/egl.h>
-
-#ifndef GL_MAP_READ_BIT
-#define GL_MAP_READ_BIT 0x0001
-#define GL_MAP_WRITE_BIT 0x0002
-#endif
-
 //#define DEBUG
 #ifdef DEBUG
 #define DBG(a) a
@@ -187,7 +179,7 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
         VaoSharedClear(glstate->vao);
     
     int go_real = 0;
-    if(     (target==GL_ARRAY_BUFFER || target==GL_ELEMENT_ARRAY_BUFFER || target==GL_PIXEL_UNPACK_BUFFER) 
+    if(     (target==GL_ARRAY_BUFFER || target==GL_ELEMENT_ARRAY_BUFFER) 
          && (usage==GL_STREAM_DRAW || usage==GL_STATIC_DRAW || usage==GL_DYNAMIC_DRAW) && globals4es.usevbo)
         go_real = 1;
     
@@ -203,7 +195,6 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
             LOAD_GLES(glGenBuffers);
             gles_glGenBuffers(1, &buff->real_buffer);
         }
-
         LOAD_GLES(glBufferData);
         LOAD_GLES(glBindBuffer);
         bindBuffer(target, buff->real_buffer);
@@ -454,13 +445,12 @@ void APIENTRY_GL4ES gl4es_glGetNamedBufferParameteriv(GLuint buffer, GLenum valu
     bufferGetParameteriv(buff, value, data);
 }
 
-// --- [MOD START] Hardware Mapping Implementation (FIXED LINKER) ---
 void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
     DBG(printf("glMapBuffer(%s, %s)\n", PrintEnum(target), PrintEnum(access));)
-    if (!buffer_target(target)) {
-        errorShim(GL_INVALID_ENUM);
-        return (void*)NULL;
-    }
+	if (!buffer_target(target)) {
+		errorShim(GL_INVALID_ENUM);
+		return (void*)NULL;
+	}
 
     if(target==GL_ARRAY_BUFFER)
         VaoSharedClear(glstate->vao);
@@ -468,58 +458,18 @@ void* APIENTRY_GL4ES gl4es_glMapBuffer(GLenum target, GLenum access) {
     glbuffer_t *buff = getbuffer_buffer(target);
     if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-        return NULL;
+		return NULL;
     }
     if(buff->mapped) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-
-    if(hardext.mapbuffer && buff->real_buffer) {
-        static void* (*ptr_glMapBufferRange)(GLenum, GLintptr, GLsizeiptr, GLbitfield) = NULL;
-        static int function_checked = 0;
-
-        if (!function_checked) {
-            // FIX: Gunakan dlopen/dlsym untuk menghindari Linker Error
-            // Kita coba load langsung dari libGLESv2 (karena glMapBufferRange adalah Core GLES 3)
-            void *handle = dlopen("libGLESv2.so", RTLD_LAZY);
-            if (!handle) handle = dlopen("libGLESv3.so", RTLD_LAZY);
-            
-            if (handle) {
-                ptr_glMapBufferRange = dlsym(handle, "glMapBufferRange");
-                // Jangan dlclose handle agar pointer tetap valid selama aplikasi jalan
-            }
-
-            function_checked = 1;
-        }
-
-        if(ptr_glMapBufferRange) {
-            GLbitfield accessBits = 0;
-            if (access == GL_READ_ONLY) accessBits = GL_MAP_READ_BIT;
-            else if (access == GL_WRITE_ONLY) accessBits = GL_MAP_WRITE_BIT;
-            else accessBits = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT;
-
-            void* real_ptr = ptr_glMapBufferRange(target, 0, buff->size, accessBits);
-            
-            if (real_ptr) {
-                buff->access = access;
-                buff->mapped = 1;
-                buff->ranged = 0; 
-                noerrorShim();
-                return real_ptr;
-            }
-        }
-    }
-
-    // FALLBACK
-    buff->access = access;
-    buff->mapped = 1;
+	buff->access = access;	// not used
+	buff->mapped = 1;
     buff->ranged = 0;
-    noerrorShim();
-    return buff->data;      
+	noerrorShim();
+	return buff->data;		// Not nice, should do some copy or something probably
 }
-// --- [MOD END] ---
-
 void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
     DBG(printf("glMapNamedBuffer(%u, %s)\n", buffer, PrintEnum(access));)
 
@@ -539,16 +489,15 @@ void* APIENTRY_GL4ES gl4es_glMapNamedBuffer(GLuint buffer, GLenum access) {
 	return buff->data;		// Not nice, should do some copy or something probably
 }
 
-// --- [MOD START] Hardware Unmap Implementation (FIXED LINKER) ---
 GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     DBG(printf("glUnmapBuffer(%s)\n", PrintEnum(target));)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
     FLUSH_BEGINEND;
         
-    if (!buffer_target(target)) {
-        errorShim(GL_INVALID_ENUM);
-        return GL_FALSE;
-    }
+	if (!buffer_target(target)) {
+		errorShim(GL_INVALID_ENUM);
+		return GL_FALSE;
+	}
 
     if(target==GL_ARRAY_BUFFER)
         VaoSharedClear(glstate->vao);
@@ -556,43 +505,9 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     glbuffer_t *buff = getbuffer_buffer(target);
     if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-        return GL_FALSE;
+		return GL_FALSE;
     }
-    noerrorShim();
-
-    // LOGIKA BARU: Handle Hardware Unmap
-    int hardware_unmap_success = 0;
-    if(hardext.mapbuffer && buff->real_buffer && buff->mapped) {
-        static GLboolean (*ptr_glUnmapBuffer)(GLenum) = NULL;
-        static int unmap_checked = 0;
-
-        if(!unmap_checked) {
-            // FIX: Gunakan dlopen/dlsym
-            void *handle = dlopen("libGLESv2.so", RTLD_LAZY);
-            if (!handle) handle = dlopen("libGLESv3.so", RTLD_LAZY);
-            
-            if(handle) {
-                ptr_glUnmapBuffer = dlsym(handle, "glUnmapBuffer");
-            }
-            unmap_checked = 1;
-        }
-
-        if(ptr_glUnmapBuffer) {
-             // Coba Unmap via Driver
-             // PENTING: Jika pointer ini dipanggil dan berhasil, return value biasanya GL_TRUE (1)
-             hardware_unmap_success = ptr_glUnmapBuffer(target);
-        }
-    }
-
-    if(hardware_unmap_success) {
-        if (buff->mapped) {
-            buff->mapped = 0;
-            buff->ranged = 0;
-            return GL_TRUE;
-        }
-    }
-
-    // FALLBACK: Software Sync (Kode Lama)
+	noerrorShim();
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -605,14 +520,12 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
         gles_glBufferSubData(buff->type, buff->offset, buff->length, (void*)((uintptr_t)buff->data+buff->offset));
     }
     if (buff->mapped) {
-        buff->mapped = 0;
+		buff->mapped = 0;
         buff->ranged = 0;
-        return GL_TRUE;
-    }
-    return GL_FALSE;
+		return GL_TRUE;
+	}
+	return GL_FALSE;
 }
-// --- [MOD END] ---
-
 GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
     DBG(printf("glUnmapNamedBuffer(%u)\n", buffer);)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
@@ -702,72 +615,33 @@ void APIENTRY_GL4ES gl4es_glGetNamedBufferPointerv(GLuint buffer, GLenum pname, 
 	}
 }
 
-// --- [MOD START] Hardware MapBufferRange Implementation ---
 void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access)
 {
     DBG(printf("glMapBufferRange(%s, %p, %zd, 0x%x)\n", PrintEnum(target), (void*)offset, length, access);)
-    if (!buffer_target(target)) {
-        errorShim(GL_INVALID_ENUM);
-        return NULL;
-    }
+	if (!buffer_target(target)) {
+		errorShim(GL_INVALID_ENUM);
+		return NULL;
+	}
 
-    glbuffer_t *buff = getbuffer_buffer(target);
-    if (buff==NULL) {
+	glbuffer_t *buff = getbuffer_buffer(target);
+	if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-        return NULL;
+		return NULL;		// Should generate an error!
     }
     if(buff->mapped) {
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-
-    // LOGIKA BARU: Injeksi dlsym untuk glMapBufferRange
-    if(hardext.mapbuffer && buff->real_buffer) {
-        static void* (*ptr_glMapBufferRange)(GLenum, GLintptr, GLsizeiptr, GLbitfield) = NULL;
-        static int function_checked = 0;
-
-        if (!function_checked) {
-            // Kita cari library GLES
-            void *handle = dlopen("libGLESv2.so", RTLD_LAZY);
-            if (!handle) handle = dlopen("libGLESv3.so", RTLD_LAZY);
-            
-            if (handle) {
-                ptr_glMapBufferRange = dlsym(handle, "glMapBufferRange");
-            }
-            
-            function_checked = 1;
-        }
-
-        // Eksekusi Hardware Map
-        if(ptr_glMapBufferRange) {
-             // Access flags bitfield di GLES biasanya kompatibel dengan GL
-             void* real_ptr = ptr_glMapBufferRange(target, offset, length, access);
-             
-             if(real_ptr) {
-                 buff->access = access; // Simpan flags akses
-                 buff->mapped = 1;
-                 buff->ranged = 1;      // Tandai sebagai Range Map
-                 buff->offset = offset;
-                 buff->length = length;
-                 noerrorShim();
-                 return real_ptr; // Return pointer VRAM asli!
-             }
-        }
-    }
-
-    // FALLBACK: Software Emulation
-    buff->access = access;
-    buff->mapped = 1;
+	buff->access = access;
+	buff->mapped = 1;
     buff->ranged = 1;
     buff->offset = offset;
     buff->length = length;
-    noerrorShim();
+	noerrorShim();
     uintptr_t ret = (uintptr_t)buff->data;
     ret += offset;
-    return (void*)ret;
+	return (void*)ret;
 }
-// --- [MOD END] ---
-
 void APIENTRY_GL4ES gl4es_glFlushMappedBufferRange(GLenum target, GLintptr offset, GLsizeiptr length)
 {
     DBG(printf("glFlushMappedBufferRange(%s, %p, %zd)\n", PrintEnum(target), (void*)offset, length);)

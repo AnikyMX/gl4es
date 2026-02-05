@@ -907,7 +907,7 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
                   GLsizei width, GLsizei height, GLint border,
                   GLenum format, GLenum type, const GLvoid *data) {
     DBG(printf("glTexImage2D on target=%s with unpack_row_length(%i), size(%i,%i) and skip(%i,%i), format(internal)=%s(%s), type=%s, data=%p, level=%i (mipmap_need=%i, mipmap_auto=%i, base_level=%i, max_level=%i) => texture=%u (streamed=%i), glstate->list.compiling=%d\n", PrintEnum(target), glstate->texture.unpack_row_length, width, height, glstate->texture.unpack_skip_pixels, glstate->texture.unpack_skip_rows, PrintEnum(format), (internalformat==3)?"3":(internalformat==4?"4":PrintEnum(internalformat)), PrintEnum(type), data, level, glstate->texture.bound[glstate->texture.active][what_target(target)]->mipmap_need, glstate->texture.bound[glstate->texture.active][what_target(target)]->mipmap_auto, glstate->texture.bound[glstate->texture.active][what_target(target)]->base_level, glstate->texture.bound[glstate->texture.active][what_target(target)]->max_level, glstate->texture.bound[glstate->texture.active][what_target(target)]->texture, glstate->texture.bound[glstate->texture.active][what_target(target)]->streamed, glstate->list.compiling);)
-
+    
     if(data==NULL && (internalformat == GL_RGB16F || internalformat == GL_RGBA16F))
     internal2format_type(internalformat, &format, &type);
 
@@ -1538,66 +1538,13 @@ void APIENTRY_GL4ES gl4es_glTexImage2D(GLenum target, GLint level, GLint interna
 void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
                      GLsizei width, GLsizei height, GLenum format, GLenum type,
                      const GLvoid *data) {
+
     if (glstate->list.pending) {
         gl4es_flush();
     } else {
         PUSH_IF_COMPILING(glTexSubImage2D);
     }
     realize_bound(glstate->texture.active, target);
-
-    // --- [MOD START] SMART PANORAMA OPTIMIZER ---
-    // Target: Panorama Minecraft (256x256, BGRA)
-    // Optimasi: Update hanya 1 dari setiap 3 frame (20 FPS cap untuk tekstur)
-    if (hardext.bgra8888 && format == GL_BGRA && type == GL_UNSIGNED_BYTE && 
-        width == 256 && height == 256 && !globals4es.texstream) {
-        
-        static int upload_skip_counter = 0;
-        upload_skip_counter++;
-
-        // Izinkan upload jika:
-        // 1. Ini 120 frame pertama (Loading awal mulus)
-        // 2. ATAU Counter kelipatan 3 (Hemat resource 66%)
-        // 3. Sedang compile list (Jangan skip saat compiling)
-        int allow_upload = 0;
-        
-        if (upload_skip_counter < 1200) {
-            allow_upload = 1; 
-        } else if ((upload_skip_counter % 3) == 0) {
-            allow_upload = 1; 
-        }
-
-        if (!allow_upload && !glstate->list.compiling) {
-            noerrorShim();
-            return; // SKIP! Hemat CPU & Bandwidth GPU
-        }
-
-        // --- FAST PATH EXECUTION ---
-        const GLuint rtarget = map_tex_target(target);
-        LOAD_GLES(glTexSubImage2D);
-        LOAD_GLES(glTexParameteri);
-
-        // [OPTIMASI] Matikan Mipmap Paksa!
-        // Ini mencegah Driver menghitung ulang mipmap yang berat
-        gltexture_t *bound = glstate->texture.bound[glstate->texture.active][what_target(target)];
-        if (bound->mipmap_need || bound->sampler.min_filter != GL_LINEAR) {
-             bound->mipmap_need = 0;
-             bound->sampler.min_filter = GL_LINEAR;
-             bound->sampler.mag_filter = GL_LINEAR;
-             bound->max_level = 0; // Kunci di level 0
-             
-             gles_glTexParameteri(rtarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-             gles_glTexParameteri(rtarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-             gles_glTexParameteri(rtarget, GL_TEXTURE_MAX_LEVEL, 0); 
-        }
-
-        // Direct Upload ke GPU (Bypass Konversi CPU)
-        noerrorShim();
-        gles_glTexSubImage2D(rtarget, level, xoffset, yoffset, width, height, format, type, data);
-        
-        // Skip Shadow Copy ke RAM (Hemat Memory Bandwidth)
-        return; 
-    }
-    // --- [MOD END] ---
 
 #ifdef __BIG_ENDIAN__
     if(type==GL_UNSIGNED_INT_8_8_8_8)
