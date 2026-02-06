@@ -151,7 +151,7 @@ void GetHardwareExtensions(int notest)
     EGLSurface eglSurface;
     EGLContext eglContext;
 
-    SHUT_LOGD("Using GLES %s backend\n", (hardext.esversion==1)?"1.1":"2.0");
+    //SHUT_LOGD("Using GLES %s backend\n", (hardext.esversion==1)?"1.1":"2.0");
 
     // Create a PBuffer first...
     EGLint egl_context_attrib_es2[] = {
