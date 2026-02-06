@@ -10,6 +10,8 @@
 #include <math.h>
 #include <string.h>
 
+#include <stdlib.h>
+
 //#define DEBUG
 #ifdef DEBUG
 #define DBG(a) a
