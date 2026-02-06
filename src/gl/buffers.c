@@ -202,7 +202,7 @@ void APIENTRY_GL4ES gl4es_glBufferData(GLenum target, GLsizeiptr size, const GLv
         DBG(printf(" => real VBO %d\n", buff->real_buffer);)
     }
         
-        if (buff->data && buff->size<size) {
+    if (buff->data && buff->size<size) {
         free(buff->data);
         buff->data = NULL;
     }

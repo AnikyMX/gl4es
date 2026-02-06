@@ -1,5 +1,6 @@
-cmake_minimum_required(VERSION 3.22.1)
+cmake_minimum_required(VERSION 2.8.12...3.10)
 
+# Import modules
 include(CheckCompilerFlag)
 
 project(gl4es LANGUAGES C)
@@ -44,7 +45,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows" OR CMAKE_SYSTEM_NAME MATCHES "MSYS")
     set(NO_GBM ON)
     set(WIN32_PLATFORM ON)
     if(CMAKE_C_COMPILER_ID MATCHES "MSVC" OR "x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC")
-        set(WIN32_MSVC ON)
+        set(WIN32_MSVC ON)  #msvc or icl or clang-cl
     endif()
 endif()
 
@@ -67,7 +68,7 @@ if(NOT DEFAULT_ES)
     if(PANDORA)
         set(DEFAULT_ES 1)
     else()
-        set(DEFAULT_ES 3)
+        set(DEFAULT_ES 2)
     endif()
 endif()
 
@@ -112,7 +113,7 @@ endif()
 # Android
 if(ANDROID)
     add_definitions(-DANDROID)
-    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=3)
+    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=2)
 endif()
 
 if(USE_ANDROID_LOG)
@@ -329,5 +330,6 @@ create_test(FoobillardPlus foobillardplus "0000014748" 50 "798x478+1+1" 60)
 create_test(Descent3 descent3 "0000284192" 20 "638x478+1+1")
 create_test(PointSprite pointsprite "0000248810" 20)
 
+#create_test_GLES(Neverball 2 neverball "0000078750" 200 "798x478+1+1")
 create_test_GLES(OpenRA 2 openra "0000031249" 20 "638x478+1+1")
 create_test_GLES(GLSL_lighting 2 glsl_lighting "0000505393" 20)

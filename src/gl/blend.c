@@ -65,7 +65,7 @@ void APIENTRY_GL4ES gl4es_glBlendColor(GLclampf red, GLclampf green, GLclampf bl
     glstate->blend_color[3] = alpha;
 
     if(!globals4es.shaderblend) {
-        LOAD_GLES3_OR_OES(glBlendColor);
+        LOAD_GLES2_OR_OES(glBlendColor);
         if  (gles_glBlendColor)
             gles_glBlendColor(red, green, blue, alpha);
         else {
@@ -86,7 +86,7 @@ void APIENTRY_GL4ES gl4es_glBlendFuncSeparate(GLenum sfactorRGB, GLenum dfactorR
     if(!glstate->list.pending) 
         PUSH_IF_COMPILING(glBlendFuncSeparate)
 
-    LOAD_GLES3_OR_OES(glBlendFuncSeparate);
+    LOAD_GLES2_OR_OES(glBlendFuncSeparate);
     if(sfactorRGB==glstate->blendsfactorrgb && dfactorRGB==glstate->blenddfactorrgb 
         && sfactorAlpha==glstate->blendsfactoralpha && dfactorAlpha==glstate->blenddfactoralpha)
         return; // no change...
@@ -149,7 +149,7 @@ void APIENTRY_GL4ES gl4es_glBlendEquationSeparate(GLenum modeRGB, GLenum modeA) 
         glstate->fpe_state->blendeqrgb = rgb;
         glstate->fpe_state->blendeqalpha = alpha;
     } else {
-        LOAD_GLES3_OR_OES(glBlendEquationSeparate);
+        LOAD_GLES2_OR_OES(glBlendEquationSeparate);
         #ifndef PANDORA
         if(gles_glBlendEquationSeparate)
         #endif
@@ -192,7 +192,7 @@ void APIENTRY_GL4ES gl4es_glBlendFunc(GLenum sfactor, GLenum dfactor) {
         glstate->fpe_state->blenddstalpha = dstalpha;
     } else {
         LOAD_GLES(glBlendFunc);
-        LOAD_GLES3_OR_OES(glBlendFuncSeparate);
+        LOAD_GLES2_OR_OES(glBlendFuncSeparate);
         errorGL();
         
         // There are some limitations in GLES1.1 Blend functions
@@ -285,7 +285,7 @@ void APIENTRY_GL4ES gl4es_glBlendEquation(GLenum mode) {
         glstate->fpe_state->blendeqrgb = rgb;
         glstate->fpe_state->blendeqalpha = alpha;
     } else {
-        LOAD_GLES3_OR_OES(glBlendEquation);
+        LOAD_GLES2_OR_OES(glBlendEquation);
         errorGL();
         #ifdef ODROID
         if(gles_glBlendEquation)

@@ -20,11 +20,11 @@ hardext_t hardext = {0};
 
 static int testGLSL(const char* version, int uniformLoc) {
     // check if glsl 120 shaders are supported... by compiling one !
-    LOAD_GLES3(glCreateShader);
-    LOAD_GLES3(glShaderSource);
-    LOAD_GLES3(glCompileShader);
-    LOAD_GLES3(glGetShaderiv);
-    LOAD_GLES3(glDeleteShader);
+    LOAD_GLES2(glCreateShader);
+    LOAD_GLES2(glShaderSource);
+    LOAD_GLES2(glCompileShader);
+    LOAD_GLES2(glGetShaderiv);
+    LOAD_GLES2(glDeleteShader);
     LOAD_GLES(glGetError);
 
     GLuint shad = gles_glCreateShader(GL_VERTEX_SHADER);
@@ -44,7 +44,7 @@ static int testGLSL(const char* version, int uniformLoc) {
     gles_glGetShaderiv(shad, GL_COMPILE_STATUS, &compiled);
     /*
     if(!compiled) {
-        LOAD_GLES3(glGetShaderInfoLog)
+        LOAD_GLES2(glGetShaderInfoLog)
         char buff[500];
         gles_glGetShaderInfoLog(shad, 500, NULL, buff);
         printf("LIBGL: \"%s\" failed, message:\n%s\n", version, buff);
@@ -57,11 +57,11 @@ static int testGLSL(const char* version, int uniformLoc) {
 }
 
 static int testTextureCubeLod() {
-    LOAD_GLES3(glCreateShader);
-    LOAD_GLES3(glShaderSource);
-    LOAD_GLES3(glCompileShader);
-    LOAD_GLES3(glGetShaderiv);
-    LOAD_GLES3(glDeleteShader);
+    LOAD_GLES2(glCreateShader);
+    LOAD_GLES2(glShaderSource);
+    LOAD_GLES2(glCompileShader);
+    LOAD_GLES2(glGetShaderiv);
+    LOAD_GLES2(glDeleteShader);
     LOAD_GLES(glGetError);
 
     GLuint shad = gles_glCreateShader(GL_FRAGMENT_SHADER);
@@ -151,15 +151,11 @@ void GetHardwareExtensions(int notest)
     EGLSurface eglSurface;
     EGLContext eglContext;
 
-    char* es_ver_string = "2.0";
-    if (hardext.esversion == 1) es_ver_string = "1.1";
-    else if (hardext.esversion == 3) es_ver_string = "3.0";
-    
-    SHUT_LOGD("Using GLES %s backend\n", es_ver_string);
+    SHUT_LOGD("Using GLES %s backend\n", (hardext.esversion==1)?"1.1":"2.0");
 
     // Create a PBuffer first...
-    EGLint egl_context_attrib_es3[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 3,
+    EGLint egl_context_attrib_es2[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE
     };
 
@@ -237,7 +233,8 @@ void GetHardwareExtensions(int notest)
         egl_eglTerminate(eglDisplay);
         return;
     }
-    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, (hardext.esversion==1) ? egl_context_attrib : egl_context_attrib_es3);    if(!eglContext) {
+    eglContext = egl_eglCreateContext(eglDisplay, pbufConfigs[0], EGL_NO_CONTEXT, (hardext.esversion==1)?egl_context_attrib:egl_context_attrib_es2);
+    if(!eglContext) {
         SHUT_LOGE("Error while gathering supported extension (eglCreateContext: %s), default to none\n", PrintEGLError(0));
         return;
     }
@@ -340,7 +337,7 @@ void GetHardwareExtensions(int notest)
             S("GL_OES_fragment_precision_high ", highp, 1);
             if(!hardext.highp) {
                 // check if highp is supported anyway
-                LOAD_GLES3(glGetShaderPrecisionFormat);
+                LOAD_GLES2(glGetShaderPrecisionFormat);
                 if(gles_glGetShaderPrecisionFormat) {
                     GLint range[2] = {0};
                     GLint precision=0;
@@ -365,7 +362,6 @@ void GetHardwareExtensions(int notest)
         gles_glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &hardext.maxvattrib);
         SHUT_LOGD("Max vertex attrib: %d\n", hardext.maxvattrib);
         S("GL_OES_standard_derivatives ", derivatives, 1);
-        S("GL_EXT_occlusion_query_boolean", occlusion_query, 1);
         S("GL_ARM_shader_framebuffer_fetch", shader_fbfetch, 1);
         S("GL_OES_get_program ", prgbinary, 1);
         if(!hardext.prgbinary) {
@@ -424,13 +420,6 @@ void GetHardwareExtensions(int notest)
     // get GLES driver signatures...
     const char *vendor = (const char *) gles_glGetString(GL_VENDOR);
     SHUT_LOGD("Hardware vendor is %s\n", vendor);
-    const char *gpu_name = (const char *) gles_glGetString(GL_RENDERER); // GL_RENDERER = 0x1F01
-    if (gpu_name) {
-        strncpy(hardext.renderer, gpu_name, 127);
-        hardext.renderer[127] = '\0'; // Safety null termination
-    } else {
-        strcpy(hardext.renderer, "Unknown GPU");
-    }
     if(strstr(vendor, "ARM"))
         hardext.vendor = VEND_ARM;
     else if(strstr(vendor, "Imagination Technologies"))

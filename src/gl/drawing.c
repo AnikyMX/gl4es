@@ -17,34 +17,6 @@
 #define DBG(a)
 #endif
 
-static void fast_minmax_indices_us(const GLushort* indices, GLsizei count, GLsizei* max, GLsizei* min) {
-    if (count == 0) { *max=0; *min=0; return; }
-    
-    GLushort lmin = 0xFFFF;
-    GLushort lmax = 0;
-    int i = 0;
-
-    for (; i <= count - 8; i += 8) {
-        GLushort v0 = indices[i];   if (v0 < lmin) lmin = v0; if (v0 > lmax) lmax = v0;
-        GLushort v1 = indices[i+1]; if (v1 < lmin) lmin = v1; if (v1 > lmax) lmax = v1;
-        GLushort v2 = indices[i+2]; if (v2 < lmin) lmin = v2; if (v2 > lmax) lmax = v2;
-        GLushort v3 = indices[i+3]; if (v3 < lmin) lmin = v3; if (v3 > lmax) lmax = v3;
-        GLushort v4 = indices[i+4]; if (v4 < lmin) lmin = v4; if (v4 > lmax) lmax = v4;
-        GLushort v5 = indices[i+5]; if (v5 < lmin) lmin = v5; if (v5 > lmax) lmax = v5;
-        GLushort v6 = indices[i+6]; if (v6 < lmin) lmin = v6; if (v6 > lmax) lmax = v6;
-        GLushort v7 = indices[i+7]; if (v7 < lmin) lmin = v7; if (v7 > lmax) lmax = v7;
-    }
-
-    for (; i < count; i++) {
-        GLushort v = indices[i];
-        if (v < lmin) lmin = v;
-        if (v > lmax) lmax = v;
-    }
-    
-    *min = lmin;
-    *max = lmax;
-}
-
 static GLboolean is_cache_compatible(GLsizei count) {
     #define T2(AA, A, B) \
     if(glstate->vao->AA!=glstate->vao->B.enabled) return GL_FALSE; \
@@ -644,7 +616,7 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
 
-        fast_minmax_indices_us(sindices, count, &max, &min);
+        normalize_indices_us(sindices, &max, &min, count);
 
         if(globals4es.mergelist && list->stage>=STAGE_DRAW && is_list_compatible(list) && !list->use_glstate && sindices) {
             list = NewDrawStage(list, mode);
@@ -675,7 +647,7 @@ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type
             sindices = (GLushort*)malloc(count*sizeof(GLushort));
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
-        fast_minmax_indices_us(sindices, count, &max, &min);
+        normalize_indices_us(sindices, &max, &min, count);
         list = arrays_to_renderlist(list, mode, min, max + 1);
         list->indices = sindices;
         list->ilen = count;
@@ -861,11 +833,11 @@ void APIENTRY_GL4ES gl4es_glMultiDrawArrays(GLenum mode, const GLint *firsts, co
         if (intercept) {
             if(list) {
                 NewStage(list, STAGE_DRAW);
-            }
-            if(globals4es.mergelist && list->stage>=STAGE_DRAW && is_list_compatible(list) && !list->use_glstate) {
-                list = NewDrawStage(list, mode);
-                list = arrays_add_renderlist(list, mode, first, count+first, NULL, 0);
-                NewStage(list, STAGE_POSTDRAW);
+                if(globals4es.mergelist && list->stage>=STAGE_DRAW && is_list_compatible(list) && !list->use_glstate) {
+                    list = NewDrawStage(list, mode);
+                    list = arrays_add_renderlist(list, mode, first, count+first, NULL, 0);
+                    NewStage(list, STAGE_POSTDRAW);
+                }
             }
             else
                 list = arrays_to_renderlist(NULL, mode, first, count+first);
@@ -885,7 +857,7 @@ void APIENTRY_GL4ES gl4es_glMultiDrawArrays(GLenum mode, const GLint *firsts, co
                     }
                     indfirst = realfirst;
                     GLushort *p = indices;
-                    for (int i=0, j=indfirst; i+3<indcnt; i+=4, j+=4) {
+                    for (int k=0, j=indfirst; k+3<indcnt; k+=4, k+=4) {
                             *(p++) = j + 0;
                             *(p++) = j + 1;
                             *(p++) = j + 2;
@@ -967,7 +939,7 @@ void APIENTRY_GL4ES gl4es_glMultiDrawElements( GLenum mode, GLsizei *counts, GLe
         if(need_free) {
               GLvoid *src;
               if (glstate->vao->elements) {
-                  src = (void*)(char*)glstate->vao->elements->data + (uintptr_t)indices;
+                  src = (void*)(char*)glstate->vao->elements->data + (uintptr_t)indices[i];
               } else {
                   src = (GLvoid *) indices[i];
               }
@@ -976,14 +948,14 @@ void APIENTRY_GL4ES gl4es_glMultiDrawElements( GLenum mode, GLsizei *counts, GLe
         } else {
               if(type==GL_UNSIGNED_INT) {
                   if (glstate->vao->elements) {
-                      iindices = (void*)(char*)glstate->vao->elements->data + (uintptr_t)indices;
+                      iindices = (void*)(char*)glstate->vao->elements->data + (uintptr_t)indices[i];
                   } else {
                       iindices = (GLuint *) indices[i];
                   }
               }
               else {
                   if (glstate->vao->elements) {
-                      sindices = (void*)(char*)glstate->vao->elements->data + (uintptr_t)indices;
+                      sindices = (void*)(char*)glstate->vao->elements->data + (uintptr_t)indices[i];
                   } else {
                       sindices = (GLushort *) indices[i];
                   }
@@ -1003,7 +975,7 @@ void APIENTRY_GL4ES gl4es_glMultiDrawElements( GLenum mode, GLsizei *counts, GLe
                 sindices = (GLushort*)malloc(count*sizeof(GLushort));
                 memcpy(sindices, tmp, count*sizeof(GLushort));
             }
-            fast_minmax_indices_us(sindices, count, &max, &min);
+            normalize_indices_us(sindices, &max, &min, count);
             list = arrays_to_renderlist(list, mode, min, max + 1);
             list->indices = sindices;
             list->ilen = count;
@@ -1028,7 +1000,7 @@ void APIENTRY_GL4ES gl4es_glMultiDrawElements( GLenum mode, GLsizei *counts, GLe
                 sindices = (GLushort*)malloc(count*sizeof(GLushort));
                 memcpy(sindices, tmp, count*sizeof(GLushort));
             }
-            fast_minmax_indices_us(sindices, count, &max, &min);
+            normalize_indices_us(sindices, &max, &min, count);
             if(list) {
                 NewStage(list, STAGE_DRAW);
             }
@@ -1504,7 +1476,7 @@ void APIENTRY_GL4ES gl4es_glDrawElementsInstanced(GLenum mode, GLsizei count, GL
             sindices = (GLushort*)malloc(count*sizeof(GLushort));
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
-        fast_minmax_indices_us(sindices, count, &max, &min);
+        normalize_indices_us(sindices, &max, &min, count);
         list = arrays_to_renderlist(list, mode, min, max + 1);
         list->indices = sindices;
         list->ilen = count;
@@ -1530,7 +1502,7 @@ void APIENTRY_GL4ES gl4es_glDrawElementsInstanced(GLenum mode, GLsizei count, GL
             sindices = (GLushort*)malloc(count*sizeof(GLushort));
             memcpy(sindices, tmp, count*sizeof(GLushort));
         }
-        fast_minmax_indices_us(sindices, count, &max, &min);
+        normalize_indices_us(sindices, &max, &min, count);
         list = arrays_to_renderlist(list, mode, min, max + 1);
         list->indices = sindices;
         list->ilen = count;

@@ -1077,7 +1077,7 @@ void APIENTRY_GL4ES gl4es_glShadeModel(GLenum mode) {
     if(mode==glstate->shademodel)
         return;
     glstate->shademodel = mode;
-    LOAD_GLES3(glShadeModel);
+    LOAD_GLES2(glShadeModel);
     if(gles_glShadeModel) {
         errorGL();
         gles_glShadeModel(mode);
@@ -1115,7 +1115,7 @@ void APIENTRY_GL4ES gl4es_glLogicOp(GLenum opcode) {
         return;
     // TODO: test if opcode is valid
     glstate->logicop = opcode;
-    LOAD_GLES3(glLogicOp);
+    LOAD_GLES2(glLogicOp);
     if(gles_glLogicOp) {
         errorGL();
         gles_glLogicOp(opcode);

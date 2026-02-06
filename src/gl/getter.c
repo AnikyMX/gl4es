@@ -135,8 +135,6 @@ void BuildExtensionsList() {
 				);
         if(!globals4es.notexrect)
             strcat(extensions, "GL_ARB_texture_rectangle ");
-        if(globals4es.queries)
-            strcat(extensions, "GL_ARB_occlusion_query ");
         if(globals4es.vabgra)
             strcat(extensions, "GL_ARB_vertex_array_bgra ");
 		if(globals4es.npot>=1)
@@ -1138,7 +1136,7 @@ void APIENTRY_GL4ES gl4es_glGetClipPlanef(GLenum plane, GLfloat * equation)
         errorShim(GL_INVALID_ENUM);
         return;
     }
-    LOAD_GLES3(glGetClipPlanef);
+    LOAD_GLES2(glGetClipPlanef);
     if(gles_glGetClipPlanef)
     {
         errorGL();

@@ -1,5 +1,6 @@
 include_directories(util)
 
+#file(GLOB_RECURSE GL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gl/*.c)
 SET(GL_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/gl/arbconverter.c
 	${CMAKE_CURRENT_SOURCE_DIR}/gl/arbgenerator.c
@@ -138,6 +139,8 @@ SET(GL_H
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND NOT NO_LOADER)
     include_directories(glx)
+#    aux_source_directory(glx GLX_SOURCES)
+#    list(APPEND GL_SOURCES ${GLX_SOURCES})
     list(APPEND GL_SRC
         ${CMAKE_CURRENT_SOURCE_DIR}/glx/hardext.c
         ${CMAKE_CURRENT_SOURCE_DIR}/glx/gbm.c
@@ -190,6 +193,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
         add_library(OPENGL32 STATIC ${GL_SRC})
     else()
         add_library(OPENGL32 SHARED ${GL_SRC})
+        # some ES simulators used opengl32.dll :(
         set_target_properties(OPENGL32 PROPERTIES OUTPUT_NAME "GL32")
         set_target_properties(OPENGL32 PROPERTIES IMPORT_PREFIX "OPEN")
     endif()

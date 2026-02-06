@@ -57,7 +57,6 @@ typedef struct _hardext {
     int highp;          // GL_OES_fragment_precision_high
     int fragdepth;      // GL_EXT_frag_depth
     int derivatives;    // GL_OES_standard_derivatives
-    int occlusion_query; // GL_EXT_occlusion_query_boolean
     int shaderlod;      // GL_EXT_shader_texture_lod
     int cubelod;        // textureCubeLod doesn't need "EXT" even with GL_EXT_shader_texture_lod
     int gbm;            // EGL_KHR_platform_gbm
@@ -72,7 +71,6 @@ typedef struct _hardext {
     int glsl120;        // does version 120 glsl shader are supported ?
     int glsl300es;      // does version 300es glsl shader are supported ?
     int glsl310es;      // does version 300es glsl shader are supported ?
-    char renderer[128];
 } hardext_t;
 
 EXPORT extern hardext_t hardext;
