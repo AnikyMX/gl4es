@@ -1,6 +1,5 @@
-cmake_minimum_required(VERSION 2.8.12...3.10)
+cmake_minimum_required(VERSION 3.22.1)
 
-# Import modules
 include(CheckCompilerFlag)
 
 project(gl4es LANGUAGES C)
@@ -45,11 +44,10 @@ if(CMAKE_SYSTEM_NAME MATCHES "Windows" OR CMAKE_SYSTEM_NAME MATCHES "MSYS")
     set(NO_GBM ON)
     set(WIN32_PLATFORM ON)
     if(CMAKE_C_COMPILER_ID MATCHES "MSVC" OR "x${CMAKE_C_SIMULATE_ID}" STREQUAL "xMSVC")
-        set(WIN32_MSVC ON)  #msvc or icl or clang-cl
+        set(WIN32_MSVC ON)
     endif()
 endif()
 
-# Pandora
 if(PANDORA)
     add_definitions(-DPANDORA)
     add_definitions(-DTEXSTREAM)
@@ -76,28 +74,23 @@ if(STATICLIB)
     add_definitions(-DSTATICLIB)
 endif(STATICLIB)
 
-# Pyra
 if(PYRA)
     add_definitions(-DPYRA)
     set(USE_CLOCK ON)
-    #add_definitions(-DTEXSTREAM)
     add_definitions(-mcpu=cortex-a15 -mfpu=neon-vfpv4 -mfloat-abi=hard -ftree-vectorize -fsingle-precision-constant -ffast-math)
     set(NO_GBM ON)
 endif()
 
-# Raspberry PI
 if(BCMHOST)
     include_directories(/opt/vc/include /opt/vc/include/interface/vcos/pthreads /opt/vc/include/interface/vmcs_host/linux)
     link_directories(/opt/vc/lib)
     add_definitions(-DBCMHOST)
 endif()
 
-# ODROID
 if(ODROID)
     add_definitions(-DODROID)
 endif()
 
-# GOA_CLONE
 if(GOA_CLONE)
     add_definitions(-DGOA_CLONE)
     if(NOT ${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
@@ -110,7 +103,6 @@ if(GOA_CLONE)
     set(GLX_STUBS ON)
 endif()
 
-# Android
 if(ANDROID)
     add_definitions(-DANDROID)
     add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=2)
@@ -121,13 +113,11 @@ if(USE_ANDROID_LOG)
     find_library(log-lib log)
 endif()
 
-#PocketCHIP
 if(CHIP)
     add_definitions(-DCHIP)
     add_definitions(-mcpu=cortex-a8 -mfpu=neon -mfloat-abi=hard -ftree-vectorize -fsingle-precision-constant -ffast-math)
 endif()
 
-# AmigaOS4
 if(AMIGAOS4)
     set(CMAKE_C_COMPILER "ppc-amigaos-gcc")
     set(CMAKE_CXX_COMPILER "ppc-amigaos-g++")
@@ -142,13 +132,11 @@ if(AMIGAOS4)
     set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 -gstabs")
 endif()
 
-#NOX11
 if(NOX11)
     add_definitions(-DEGL_NO_X11)
     add_definitions(-DNOX11)
 endif()
 
-#NOEGL
 if(NOEGL)
     add_definitions(-DNOEGL)
     add_definitions(-DNOX11)
@@ -165,7 +153,6 @@ if(NO_GBM)
     add_definitions(-DNO_GBM)
 endif()
 
-#NOX11
 if(USE_CLOCK)
     add_definitions(-DUSE_CLOCK)
 endif()
@@ -194,7 +181,6 @@ if(GLX_STUBS)
     add_definitions(-DGLX_STUBS)
 endif()
 
-#DEFAULT_ES=2
 if(DEFAULT_ES EQUAL 2)
     add_definitions(-DDEFAULT_ES=2)
 endif()
@@ -230,7 +216,7 @@ if(NOT WIN32_MSVC)
        set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--exclude-all-symbols,--kill-at")
     endif()
 elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
-    add_definitions(-Wno-deprecated-declarations) #strdup
+    add_definitions(-Wno-deprecated-declarations)
     add_definitions(-Wno-unused-function -Wno-unused-variable -Wno-dangling-else)
     add_definitions(-Wno-implicit-const-int-float-conversion)
     add_definitions(-Wno-visibility)
@@ -240,7 +226,7 @@ else()
     else()
         add_definitions(-wd4996 -wd4244 -wd4267 -wd4098 -wd4018)
     endif()
-    add_definitions("-Dinline=__inline" "-D__func__=__FUNCTION__") # for VC<=13
+    add_definitions("-Dinline=__inline" "-D__func__=__FUNCTION__")
 endif()
 
 if (CMAKE_CC_COMPILER_ID MATCHES "Clang" OR CMAKE_SYSTEM_NAME MATCHES "Emscripten")
@@ -330,6 +316,5 @@ create_test(FoobillardPlus foobillardplus "0000014748" 50 "798x478+1+1" 60)
 create_test(Descent3 descent3 "0000284192" 20 "638x478+1+1")
 create_test(PointSprite pointsprite "0000248810" 20)
 
-#create_test_GLES(Neverball 2 neverball "0000078750" 200 "798x478+1+1")
 create_test_GLES(OpenRA 2 openra "0000031249" 20 "638x478+1+1")
 create_test_GLES(GLSL_lighting 2 glsl_lighting "0000505393" 20)
