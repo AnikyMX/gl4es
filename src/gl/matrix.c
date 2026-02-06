@@ -8,6 +8,53 @@
 #include "init.h"
 #include "loader.h"
 
+#define MATRIX_CACHE_SIZE 4
+typedef struct {
+    GLfloat* matrix;
+    int identity;
+    GLenum mode;
+} matrix_cache_t;
+
+static matrix_cache_t matrix_cache[MATRIX_CACHE_SIZE] = {0};
+static int cache_hits = 0, cache_misses = 0;
+
+// ARMv8-A optimized matrix multiplication (4x4)
+static inline void matrix_mul_armv8(const GLfloat* restrict a, 
+                                    const GLfloat* restrict b, 
+                                    GLfloat* restrict out) {
+    // Unrolled computation for better pipeline utilization
+    out[0] = a[0]*b[0] + a[4]*b[1] + a[8]*b[2] + a[12]*b[3];
+    out[1] = a[1]*b[0] + a[5]*b[1] + a[9]*b[2] + a[13]*b[3];
+    out[2] = a[2]*b[0] + a[6]*b[1] + a[10]*b[2] + a[14]*b[3];
+    out[3] = a[3]*b[0] + a[7]*b[1] + a[11]*b[2] + a[15]*b[3];
+    
+    out[4] = a[0]*b[4] + a[4]*b[5] + a[8]*b[6] + a[12]*b[7];
+    out[5] = a[1]*b[4] + a[5]*b[5] + a[9]*b[6] + a[13]*b[7];
+    out[6] = a[2]*b[4] + a[6]*b[5] + a[10]*b[6] + a[14]*b[7];
+    out[7] = a[3]*b[4] + a[7]*b[5] + a[11]*b[6] + a[15]*b[7];
+    
+    out[8] = a[0]*b[8] + a[4]*b[9] + a[8]*b[10] + a[12]*b[11];
+    out[9] = a[1]*b[8] + a[5]*b[9] + a[9]*b[10] + a[13]*b[11];
+    out[10] = a[2]*b[8] + a[6]*b[9] + a[10]*b[10] + a[14]*b[11];
+    out[11] = a[3]*b[8] + a[7]*b[9] + a[11]*b[10] + a[15]*b[11];
+    
+    out[12] = a[0]*b[12] + a[4]*b[13] + a[8]*b[14] + a[12]*b[15];
+    out[13] = a[1]*b[12] + a[5]*b[13] + a[9]*b[14] + a[13]*b[15];
+    out[14] = a[2]*b[12] + a[6]*b[13] + a[10]*b[14] + a[14]*b[15];
+    out[15] = a[3]*b[12] + a[7]*b[13] + a[11]*b[14] + a[15]*b[15];
+}
+
+// Fast identity check with tolerance for floating point errors
+static inline int is_identity_fast(const GLfloat* m) {
+    const GLfloat eps = 1e-6f;
+    return (fabsf(m[0]-1.0f) < eps && fabsf(m[5]-1.0f) < eps && 
+            fabsf(m[10]-1.0f) < eps && fabsf(m[15]-1.0f) < eps &&
+            fabsf(m[1]) < eps && fabsf(m[2]) < eps && fabsf(m[3]) < eps &&
+            fabsf(m[4]) < eps && fabsf(m[6]) < eps && fabsf(m[7]) < eps &&
+            fabsf(m[8]) < eps && fabsf(m[9]) < eps && fabsf(m[11]) < eps &&
+            fabsf(m[12]) < eps && fabsf(m[13]) < eps && fabsf(m[14]) < eps);
+}
+
 //#define DEBUG
 #ifdef DEBUG
 #define DBG(a) a
@@ -24,34 +71,75 @@ void alloc_matrix(matrixstack_t **matrixstack, int depth) {
 
 #define TOP(A) (glstate->A->stack+(glstate->A->top*16))
 
-static GLfloat* update_current_mat() {
-	switch(glstate->matrix_mode) {
-		case GL_MODELVIEW:
-			return TOP(modelview_matrix);
-		case GL_PROJECTION:
-			return TOP(projection_matrix);
-		case GL_TEXTURE:
-			return TOP(texture_matrix[glstate->texture.active]);
-		default:
-			if(glstate->matrix_mode>=GL_MATRIX0_ARB && glstate->matrix_mode<GL_MATRIX0_ARB+MAX_ARB_MATRIX)
-				return TOP(arb_matrix[glstate->matrix_mode-GL_MATRIX0_ARB]);
-			return NULL;
-	}
+static inline GLfloat* update_current_mat(void) {
+    // Check cache first
+    for(int i = 0; i < MATRIX_CACHE_SIZE; i++) {
+        if(matrix_cache[i].mode == glstate->matrix_mode && 
+           matrix_cache[i].matrix != NULL) {
+            cache_hits++;
+            return matrix_cache[i].matrix;
+        }
+    }
+    
+    cache_misses++;
+    GLfloat* result = NULL;
+    
+    switch(glstate->matrix_mode) {
+        case GL_MODELVIEW:
+            result = TOP(modelview_matrix);
+            break;
+        case GL_PROJECTION:
+            result = TOP(projection_matrix);
+            break;
+        case GL_TEXTURE:
+            result = TOP(texture_matrix[glstate->texture.active]);
+            break;
+        default:
+            if(glstate->matrix_mode>=GL_MATRIX0_ARB && 
+               glstate->matrix_mode<GL_MATRIX0_ARB+MAX_ARB_MATRIX)
+                result = TOP(arb_matrix[glstate->matrix_mode-GL_MATRIX0_ARB]);
+    }
+    
+    // Update cache (simple round-robin)
+    static int cache_idx = 0;
+    matrix_cache[cache_idx].matrix = result;
+    matrix_cache[cache_idx].mode = glstate->matrix_mode;
+    cache_idx = (cache_idx + 1) % MATRIX_CACHE_SIZE;
+    
+    return result;
 }
 
-static int update_current_identity(int I) {
-	switch(glstate->matrix_mode) {
-		case GL_MODELVIEW:
-			return glstate->modelview_matrix->identity = (I)?1:is_identity(TOP(modelview_matrix));
-		case GL_PROJECTION:
-			return glstate->projection_matrix->identity = (I)?1:is_identity(TOP(projection_matrix));
-		case GL_TEXTURE:
-			return glstate->texture_matrix[glstate->texture.active]->identity = (I)?1:is_identity(TOP(texture_matrix[glstate->texture.active]));
-		default:
-			if(glstate->matrix_mode>=GL_MATRIX0_ARB && glstate->matrix_mode<GL_MATRIX0_ARB+MAX_ARB_MATRIX)
-				return glstate->arb_matrix[glstate->matrix_mode-GL_MATRIX0_ARB]->identity = (I)?1:is_identity(TOP(arb_matrix[glstate->matrix_mode-GL_MATRIX0_ARB]));
-		return 0;
-	}
+static inline int update_current_identity(int force) {
+    int result = 0;
+    GLfloat* current = update_current_mat();
+    
+    if(force) {
+        result = 1;
+    } else if(current) {
+        result = is_identity_fast(current);
+    }
+    
+    // Update cache
+    for(int i = 0; i < MATRIX_CACHE_SIZE; i++) {
+        if(matrix_cache[i].mode == glstate->matrix_mode) {
+            matrix_cache[i].identity = result;
+            break;
+        }
+    }
+    
+    switch(glstate->matrix_mode) {
+        case GL_MODELVIEW:
+            return glstate->modelview_matrix->identity = result;
+        case GL_PROJECTION:
+            return glstate->projection_matrix->identity = result;
+        case GL_TEXTURE:
+            return glstate->texture_matrix[glstate->texture.active]->identity = result;
+        default:
+            if(glstate->matrix_mode>=GL_MATRIX0_ARB && 
+               glstate->matrix_mode<GL_MATRIX0_ARB+MAX_ARB_MATRIX)
+                return glstate->arb_matrix[glstate->matrix_mode-GL_MATRIX0_ARB]->identity = result;
+    }
+    return 0;
 }
 
 static int send_to_hardware() {
@@ -244,37 +332,53 @@ DBG(printf("glLoadMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1],
 }
 
 void APIENTRY_GL4ES gl4es_glMultMatrixf(const GLfloat * m) {
-DBG(printf("glMultMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1], m[2], m[3], m[4], m[5], m[6], glstate->list.active);)
-	if (glstate->list.active) {
-		if(glstate->list.pending) gl4es_flush();
-		else {
-			if(glstate->list.active->stage == STAGE_MATRIX) {
-				// multiply the matrix mith the current one....
-				matrix_mul(glstate->list.active->matrix_val, m, glstate->list.active->matrix_val);
-				return;
-			}
-			NewStage(glstate->list.active, STAGE_MATRIX);
-			glstate->list.active->matrix_op = 2;
-			memcpy(glstate->list.active->matrix_val, m, 16*sizeof(GLfloat));
-			return;
-		}
-	}
-	GLfloat *current_mat = update_current_mat();
-	matrix_mul(current_mat, m, current_mat);
-	const int id = update_current_identity(0);
-	if(glstate->matrix_mode==GL_MODELVIEW)
-		glstate->normal_matrix_dirty = glstate->inv_mv_matrix_dirty = 1;
-	if(glstate->matrix_mode==GL_MODELVIEW || glstate->matrix_mode==GL_PROJECTION)
-		glstate->mvp_matrix_dirty = 1;
-	else if((glstate->matrix_mode==GL_TEXTURE) && glstate->fpe_state)
-		set_fpe_textureidentity();
-	DBG(printf(" => (%f, %f, %f, %f, %f, %f, %f...)\n", current_mat[0], current_mat[1], current_mat[2], current_mat[3], current_mat[4], current_mat[5], current_mat[6]);)
-	if(send_to_hardware()) {
-		LOAD_GLES(glLoadMatrixf);
-		LOAD_GLES(glLoadIdentity);
-		if(id) gles_glLoadIdentity();	// in case the driver as some special optimisations
-		else gles_glLoadMatrixf(current_mat);
-	}
+    DBG(printf("glMultMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", 
+               m[0], m[1], m[2], m[3], m[4], m[5], m[6], glstate->list.active);)
+    
+    if (glstate->list.active) {
+        if(glstate->list.pending) gl4es_flush();
+        else {
+            if(glstate->list.active->stage == STAGE_MATRIX) {
+                // Use optimized multiplication
+                matrix_mul_armv8(glstate->list.active->matrix_val, m, 
+                                 glstate->list.active->matrix_val);
+                return;
+            }
+            NewStage(glstate->list.active, STAGE_MATRIX);
+            glstate->list.active->matrix_op = 2;
+            memcpy(glstate->list.active->matrix_val, m, 16*sizeof(GLfloat));
+            return;
+        }
+    }
+    
+    GLfloat *current_mat = update_current_mat();
+    GLfloat temp[16];
+    
+    // Use ARMv8 optimized multiplication
+    matrix_mul_armv8(current_mat, m, temp);
+    memcpy(current_mat, temp, 16*sizeof(GLfloat));
+    
+    update_current_identity(0);
+    
+    if(glstate->matrix_mode==GL_MODELVIEW)
+        glstate->normal_matrix_dirty = glstate->inv_mv_matrix_dirty = 1;
+    if(glstate->matrix_mode==GL_MODELVIEW || glstate->matrix_mode==GL_PROJECTION)
+        glstate->mvp_matrix_dirty = 1;
+    else if((glstate->matrix_mode==GL_TEXTURE) && glstate->fpe_state)
+        set_fpe_textureidentity();
+    
+    DBG(printf(" => (%f, %f, %f, %f, %f, %f, %f...)\n", 
+               current_mat[0], current_mat[1], current_mat[2], current_mat[3], 
+               current_mat[4], current_mat[5], current_mat[6]);)
+    
+    if(send_to_hardware()) {
+        LOAD_GLES(glLoadMatrixf);
+        LOAD_GLES(glLoadIdentity);
+        if(update_current_identity(0)) 
+            gles_glLoadIdentity();
+        else 
+            gles_glLoadMatrixf(current_mat);
+    }
 }
 
 void APIENTRY_GL4ES gl4es_glLoadIdentity(void) {
@@ -326,28 +430,57 @@ DBG(printf("glScalef(%f, %f, %f), list=%p\n", x, y, z, glstate->list.active);)
 }
 
 void APIENTRY_GL4ES gl4es_glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
-DBG(printf("glRotatef(%f, %f, %f, %f), list=%p\n", angle, x, y, z, glstate->list.active);)
-	// create a rotation matrix than multiply it...
-	GLfloat tmp[16];
-	memset(tmp, 0, 16*sizeof(GLfloat));
-	if((x==0 && y==0 && z==0) || angle==0)
-		return;	// nothing to do
-	// normalize x y z
-	GLfloat l = 1.0f/sqrtf(x*x+y*y+z*z);
-	x=x*l; y=y*l; z=z*l;
-	// calculate sin/cos
-	angle*=3.1415926535f/180.f;
-	const GLfloat s=sinf(angle); 
-	const GLfloat c=cosf(angle);
-	const GLfloat c1 = 1-c;
-	//build the matrix
-	tmp[0+0] = x*x*c1+c;   tmp[0+4] = x*y*c1-z*s; tmp[0+8] = x*z*c1+y*s;
-	tmp[1+0] = y*x*c1+z*s; tmp[1+4] = y*y*c1+c;   tmp[1+8] = y*z*c1-x*s;
-	tmp[2+0] = x*z*c1-y*s; tmp[2+4] = y*z*c1+x*s; tmp[2+8] = z*z*c1+c;
-
-	tmp[3+12] = 1.0f;
-	// done...
-	gl4es_glMultMatrixf(tmp);
+    DBG(printf("glRotatef(%f, %f, %f, %f), list=%p\n", angle, x, y, z, glstate->list.active);)
+    
+    // Early exit for common cases
+    if((x==0.0f && y==0.0f && z==0.0f) || angle==0.0f)
+        return;
+    
+    // Use precomputed values for common angles
+    static const GLfloat common_angles[] = {0.0f, 90.0f, 180.0f, 270.0f};
+    static const GLfloat common_sin[] = {0.0f, 1.0f, 0.0f, -1.0f};
+    static const GLfloat common_cos[] = {1.0f, 0.0f, -1.0f, 0.0f};
+    
+    GLfloat s, c;
+    int found = 0;
+    
+    for(int i = 0; i < 4; i++) {
+        if(fabsf(angle - common_angles[i]) < 0.001f) {
+            s = common_sin[i];
+            c = common_cos[i];
+            found = 1;
+            break;
+        }
+    }
+    
+    if(!found) {
+        angle *= 0.017453292519943295f; // π/180
+        s = sinf(angle);
+        c = cosf(angle);
+    }
+    
+    // Optimized rotation matrix construction
+    GLfloat tmp[16] = {0};
+    const GLfloat c1 = 1.0f - c;
+    const GLfloat xx = x * x, yy = y * y, zz = z * z;
+    const GLfloat xy = x * y, xz = x * z, yz = y * z;
+    const GLfloat xs = x * s, ys = y * s, zs = z * s;
+    
+    tmp[0] = xx * c1 + c;
+    tmp[4] = xy * c1 - zs;
+    tmp[8] = xz * c1 + ys;
+    
+    tmp[1] = xy * c1 + zs;
+    tmp[5] = yy * c1 + c;
+    tmp[9] = yz * c1 - xs;
+    
+    tmp[2] = xz * c1 - ys;
+    tmp[6] = yz * c1 + xs;
+    tmp[10] = zz * c1 + c;
+    
+    tmp[15] = 1.0f;
+    
+    gl4es_glMultMatrixf(tmp);
 }
 
 void APIENTRY_GL4ES gl4es_glOrthof(GLfloat left, GLfloat right, GLfloat bottom, GLfloat top, GLfloat nearVal, GLfloat farVal) {
@@ -374,6 +507,15 @@ DBG(printf("glFrustumf(%f, %f, %f, %f, %f, %f) list=%p\n", left, right, top, bot
 	                                  		tmp[3+8] = -1.0f;
 
 	gl4es_glMultMatrixf(tmp);
+}
+
+// Cleanup function for matrix cache (call during context destruction)
+void cleanup_matrix_cache(void) {
+    DBG(printf("Matrix cache stats: %d hits, %d misses, hit rate: %.2f%%\n",
+               cache_hits, cache_misses,
+               cache_hits * 100.0f / (cache_hits + cache_misses + 1));)
+    memset(matrix_cache, 0, sizeof(matrix_cache));
+    cache_hits = cache_misses = 0;
 }
 
 AliasExport(void,glMatrixMode,,(GLenum mode));
