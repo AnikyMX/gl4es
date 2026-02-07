@@ -140,9 +140,7 @@ void initialize_gl4es() {
     
     // [FIX] Wajib isi string ini agar LWJGL tidak Crash!
     snprintf(globals4es.version, 49, "%d.%d GL4ES 3 Wrapper", globals4es.gl/10, globals4es.gl%10);
-    strcpy(globals4es.vendor, "ptitSeb");
-    strcpy(globals4es.renderer, "GL4ES wrapper (Helio P35 Optimized)");
-    
+
     // 6. TEXTURE & BANDWIDTH OPTIMIZATION
     globals4es.floattex = 1;
     globals4es.automipmap = 1;
