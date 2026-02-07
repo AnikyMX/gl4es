@@ -113,12 +113,16 @@ void initialize_gl4es() {
     globals4es.mergelist = 1;   // Penting untuk Minecraft (banyak list kecil)
     globals4es.queries = 1;     // Minecraft butuh Occlusion Query
     globals4es.beginend = 1;    // Optimize glBegin/glEnd
-    globals4es.deepbind = 1;    // Standard for Android linker
+    #ifdef PYRA
+    GetEnvVarInt("LIBGL_DEEPBIND", &globals4es.deepbind, 0);
+    #else
+    GetEnvVarInt("LIBGL_DEEPBIND", &globals4es.deepbind, 1);
+    #endif
     
-    // 2. DISABLE BLOAT
-    globals4es.nobanner = 1;    // Hemat waktu startup (no print to stdout)
-    globals4es.showfps = 0;     // Matikan overhead FPS counter
-    globals4es.stacktrace = 0;  // Hemat CPU saat crash (fail fast)
+    // 2. LOGGING (DIKEMBALIKAN SESUAI PERMINTAAN)
+    globals4es.nobanner = 0;    // Aktifkan banner log
+    globals4es.showfps = 0;     // FPS counter tetap mati biar ga menuhin layar
+    globals4es.stacktrace = 1;  // Nyalakan stacktrace untuk debug crash
     
     // 3. RENDER PATH (Android)
     globals4es.usefb = 1;
@@ -126,52 +130,58 @@ void initialize_gl4es() {
     globals4es.usegbm = 0;
     
     // 4. POWERVR TWEAKS (The Secret Sauce)
-    // GE8320 benci alokasi memori berulang dan alpha channel yang tidak perlu
     globals4es.recyclefbo = 1;  // RECYCLE FBO: Wajib! Mengurangi stutter inventory.
     globals4es.fbo_noalpha = 1; // Hemat bandwidth: Main screen tidak butuh Alpha channel.
     globals4es.fbounbind = 1;   // Workaround bug driver PowerVR tertentu.
     
     // 5. VERSION FORCING
-    // Jangan biarkan GL4ES menebak-nebak. Kita paksa.
     globals4es.es = 2;          // Backend GLES 2.0
-    globals4es.gl = 21;         // Export OpenGL 2.1 (Cukup untuk MC 1.16.5 ke bawah)
+    globals4es.gl = 21;         // Export OpenGL 2.1
     
     // 6. TEXTURE & BANDWIDTH OPTIMIZATION
-    globals4es.floattex = 1;    // Enable float texture (untuk shader)
-    globals4es.automipmap = 1;  // Force automipmap (lebih halus)
+    globals4es.floattex = 1;    // Enable float texture
+    globals4es.automipmap = 1;  // Force automipmap
     globals4es.texmat = 0;      // Handle texture matrix di hardware
-    globals4es.potframebuffer = 0; // PowerVR support NPOT, jangan paksa POT
-    globals4es.defaultwrap = 1; // CLAMP_TO_EDGE (Default GLES behavior, lebih cepat)
+    globals4es.potframebuffer = 0; // PowerVR support NPOT
+    globals4es.defaultwrap = 1; // CLAMP_TO_EDGE
     
     // [CRITICAL] Bandwidth Saver for Helio P35
-    globals4es.avoid24bits = 1; // Prefer 16-bit textures jika memungkinkan (RGB565)
-    globals4es.compress = 1;    // Gunakan kompresi tekstur internal jika ada
+    globals4es.avoid24bits = 1; // Prefer 16-bit textures (RGB565)
+    // Removed: globals4es.compress = 1; (Penyebab Error 1)
     
     // 7. BATCHING CONFIGURATION
-    // Ini adalah kunci FPS tinggi di CPU lemah
-    globals4es.minbatch = 40;   // Jangan kirim draw call < 40 vertex
-    globals4es.maxbatch = 1000; // Gabungkan hingga 1000 vertex
+    globals4es.minbatch = 40;   
+    globals4es.maxbatch = 1000; 
     
     // 8. VBO CONFIGURATION
-    globals4es.usevbo = 1;      // Gunakan VBO standar
+    globals4es.usevbo = 1;
     
     // 9. SHADER TWEAKS
-    globals4es.comments = 0;    // Hapus komentar shader (hemat memori/waktu compile)
-    globals4es.normalize = 1;   // Safety net untuk shader Minecraft
-    globals4es.silentstub = 1;  // Jangan log fungsi yang hilang (hemat I/O)
+    globals4es.comments = 0;    
+    globals4es.normalize = 1;   
+    globals4es.silentstub = 1; 
     
     // 10. SYSTEM TWEAKS
-    globals4es.glxrecycle = 1;  // Recycle EGL Surface
+    globals4es.glxrecycle = 1; 
     
-    // --- END OF OPTIMIZATION PROFILE ---
+    // --- PRINT BUILD INFO (DIKEMBALIKAN) ---
+    SHUT_LOGD("Initialising GL4ES 3\n");
+    if(!globals4es.nobanner) print_build_infos();
+
+    // Setup DRM Card (Hanya jika GBM aktif, Penyebab Error 2)
+#ifndef NO_GBM
+    const char* env_drmcard = GetEnvVar("LIBGL_DRMCARD");
+    if(env_drmcard) {
+        strncpy(globals4es.drmcard, env_drmcard, 50);
+    } else {
+        strcpy(globals4es.drmcard, "/dev/dri/card0");
+    }
+#endif
 
     // Apply fast math if available
     #if defined(__arm__) || defined(__aarch64__)
     fast_math();
     #endif
-
-    // Setup DRM Card (Fallback logic only)
-    strcpy(globals4es.drmcard, "/dev/dri/card0");
 
     // Load libraries (GLES, EGL)
 #if !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
@@ -181,6 +191,11 @@ void initialize_gl4es() {
     // Detect Hardware Capabilities
     // Kita set notest=0 agar GL4ES benar-benar membaca kapabilitas GPU PowerVR
     GetHardwareExtensions(0);
+
+#ifndef NO_GBM
+    if(globals4es.usegbm)
+        LoadGBMFunctions();
+#endif
 
     // Initializers
 #if !defined(NOX11)
@@ -193,10 +208,9 @@ void initialize_gl4es() {
     fpe_shader_reset_internals();
 #endif
 
-    // Log Summary (Hanya info vital)
-    SHUT_LOGD("GL4ES Optimized for Helio P35 & PowerVR GE8320 Initialized.\n");
-    SHUT_LOGD("Batching: %d-%d, VBO: %d, FBO Recycle: %d\n", 
-        globals4es.minbatch, globals4es.maxbatch, globals4es.usevbo, globals4es.recyclefbo);
+    // Log Summary (Info Vital)
+    SHUT_LOGD("Config: Batching=%d-%d, VBO=%d, FBO Recycle=%d, Avoid24Bit=%d\n", 
+        globals4es.minbatch, globals4es.maxbatch, globals4es.usevbo, globals4es.recyclefbo, globals4es.avoid24bits);
 }
 
 #ifndef NOX11
@@ -231,6 +245,7 @@ void close_gl4es() {
 
     // Persist Shader Cache (Critical for next-run performance on Cortex-A53)
     if (!globals4es.nopsa) {
+        SHUT_LOGD("Saving Precompiled Shader Archive (PSA)...\n");
         fpe_writePSA();
         fpe_FreePSA();
     }
