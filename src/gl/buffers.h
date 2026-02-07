@@ -11,7 +11,7 @@ typedef struct {
     GLuint      real_buffer;
     GLenum      type;
     GLsizeiptr  size;
-    GLsizeiptr  capacity;   // Track allocated memory size to reduce malloc churn
+    GLsizeiptr  capacity;
     GLenum      usage;
     GLint		access;
     int			mapped;
