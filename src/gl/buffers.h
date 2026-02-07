@@ -11,6 +11,7 @@ typedef struct {
     GLuint      real_buffer;
     GLenum      type;
     GLsizeiptr  size;
+    GLsizeiptr  capacity;   // Track allocated memory size to reduce malloc churn
     GLenum      usage;
     GLint		access;
     int			mapped;
@@ -172,13 +173,13 @@ typedef struct {
     GLint           size;
     GLenum          type;
     GLsizei         stride;
-    const GLvoid*   pointer;
+    const GLvoid* pointer;
     int             enabled;
     int             normalized;
     glbuffer_t      *buffer;    // reference buffer
     GLint           divisor;
     GLuint          real_buffer;    // If there is a real VBO binded
-    const GLvoid*   real_pointer;   // the pointer related to real VBO
+    const GLvoid* real_pointer;   // the pointer related to real VBO
     int             integer;
 } vertexattrib_t;
 
