@@ -653,9 +653,8 @@ void APIENTRY_GL4ES gl4es_glFlushMappedBufferRange(GLenum target, GLintptr offse
     }
 }
 
-// Tambahkan deklarasi extern ini tepat DI ATAS fungsi gl4es_glCopyBufferSubData
-// agar compiler tahu fungsi ini ada (berasal dari library sistem EGL Android)
-extern void *eglGetProcAddress(const char *procname);
+// HAPUS BARIS INI (JANGAN DITULIS LAGI):
+// extern void *eglGetProcAddress(const char *procname); 
 
 void APIENTRY_GL4ES gl4es_glCopyBufferSubData(GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)
 {
@@ -669,11 +668,11 @@ void APIENTRY_GL4ES gl4es_glCopyBufferSubData(GLenum readTarget, GLenum writeTar
     
     // Hardware Copy (GLES 3.0+ feature, supported by GE8320)
     if(hardext.esversion >= 3 || globals4es.usevbo) { 
-        // FIX: Menggunakan eglGetProcAddress yang merupakan standar Android/EGL
-        // alih-alih 'get_proc_address' yang tidak dikenali.
-        static void* (*gles_glCopyBufferSubData)(GLenum, GLenum, GLintptr, GLintptr, GLsizeiptr) = NULL;
+        // Kita gunakan pointer function static agar hanya mencari alamat sekali saja
+        static void (*gles_glCopyBufferSubData)(GLenum, GLenum, GLintptr, GLintptr, GLsizeiptr) = NULL;
         
         if(!gles_glCopyBufferSubData) {
+            // Langsung panggil eglGetProcAddress tanpa deklarasi extern
             gles_glCopyBufferSubData = (void*)eglGetProcAddress("glCopyBufferSubData");
         }
 
