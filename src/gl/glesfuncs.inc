@@ -239,5 +239,3 @@ _EX(glVertexAttribPointer);
 _EX(glVertexAttribIPointer);
 _EX(glVertexPointer);
 _EX(glViewport);
-_EX(glMapBufferRange);
-_EX(glUnmapBuffer);

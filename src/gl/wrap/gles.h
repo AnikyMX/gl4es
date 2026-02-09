@@ -4154,8 +4154,6 @@ typedef void (APIENTRY_GLES * glViewport_PTR)(glViewport_ARG_EXPAND);
 
 void APIENTRY_GL4ES gl4es_glVertexAttribIPointer(glVertexAttribIPointer_ARG_EXPAND);
 typedef void (APIENTRY_GLES * glVertexAttribIPointer_PTR)(glVertexAttribIPointer_ARG_EXPAND);
-typedef void* (APIENTRY_GLES * glMapBufferRange_PTR)(GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
-typedef GLboolean (APIENTRY_GLES * glUnmapBuffer_PTR)(GLenum target);
 
 
 

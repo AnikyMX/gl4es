@@ -494,10 +494,10 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
     FLUSH_BEGINEND;
         
-    if (!buffer_target(target)) {
-        errorShim(GL_INVALID_ENUM);
-        return GL_FALSE;
-    }
+	if (!buffer_target(target)) {
+		errorShim(GL_INVALID_ENUM);
+		return GL_FALSE;
+	}
 
     if(target==GL_ARRAY_BUFFER)
         VaoSharedClear(glstate->vao);
@@ -505,21 +505,9 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
     glbuffer_t *buff = getbuffer_buffer(target);
     if (buff==NULL) {
         errorShim(GL_INVALID_VALUE);
-        return GL_FALSE;
+		return GL_FALSE;
     }
-    noerrorShim();
-
-    // [START] GLES 3.2 Optimization
-    LOAD_GLES(glUnmapBuffer);
-    if(gles_glUnmapBuffer && buff->mapped) {
-        GLboolean ret = gles_glUnmapBuffer(target);
-        buff->mapped = 0;
-        buff->ranged = 0;
-        return ret;
-    }
-    // [END] Optimization
-
-    // Fallback ke Software (Original Code)
+	noerrorShim();
     if(buff->real_buffer && (buff->type==GL_ARRAY_BUFFER || buff->type==GL_ELEMENT_ARRAY_BUFFER) && buff->mapped && !buff->ranged && (buff->access==GL_WRITE_ONLY || buff->access==GL_READ_WRITE)) {
         LOAD_GLES(glBufferSubData);
         LOAD_GLES(glBindBuffer);
@@ -532,13 +520,12 @@ GLboolean APIENTRY_GL4ES gl4es_glUnmapBuffer(GLenum target) {
         gles_glBufferSubData(buff->type, buff->offset, buff->length, (void*)((uintptr_t)buff->data+buff->offset));
     }
     if (buff->mapped) {
-        buff->mapped = 0;
+		buff->mapped = 0;
         buff->ranged = 0;
-        return GL_TRUE;
-    }
-    return GL_FALSE;
+		return GL_TRUE;
+	}
+	return GL_FALSE;
 }
-
 GLboolean APIENTRY_GL4ES gl4es_glUnmapNamedBuffer(GLuint buffer) {
     DBG(printf("glUnmapNamedBuffer(%u)\n", buffer);)
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
@@ -645,20 +632,6 @@ void* APIENTRY_GL4ES gl4es_glMapBufferRange(GLenum target, GLintptr offset, GLsi
         errorShim(GL_INVALID_OPERATION);
         return NULL;
     }
-    // [START] GLES 3.2 Optimization
-    LOAD_GLES(glMapBufferRange);
-    if(gles_glMapBufferRange) {
-        void* ret = gles_glMapBufferRange(target, offset, length, access);
-        if(ret) {
-            buff->access = access;
-            buff->mapped = 1;
-            buff->ranged = 1;
-            buff->offset = offset;
-            buff->length = length;
-            return ret;
-        }
-    }
-    // [END] Optimization
 	buff->access = access;
 	buff->mapped = 1;
     buff->ranged = 1;

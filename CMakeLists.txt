@@ -105,7 +105,7 @@ endif()
 
 if(ANDROID)
     add_definitions(-DANDROID)
-    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=3)
+    add_definitions(-DNOX11 -DNO_GBM -DDEFAULT_ES=2)
 endif()
 
 if(USE_ANDROID_LOG)
@@ -182,7 +182,7 @@ if(GLX_STUBS)
 endif()
 
 if(DEFAULT_ES EQUAL 2)
-    add_definitions(-DDEFAULT_ES=3)
+    add_definitions(-DDEFAULT_ES=2)
 endif()
 if(DEFAULT_ES EQUAL 1)
     add_definitions(-DDEFAULT_ES=1)

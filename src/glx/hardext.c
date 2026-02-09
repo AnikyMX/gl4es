@@ -155,7 +155,7 @@ void GetHardwareExtensions(int notest)
 
     // Create a PBuffer first...
     EGLint egl_context_attrib_es2[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 3,
+        EGL_CONTEXT_CLIENT_VERSION, 2,
         EGL_NONE
     };
 
@@ -305,7 +305,7 @@ void GetHardwareExtensions(int notest)
         SHUT_LOGD("Texture Mirrored Repeat is in core, and so used\n");
         hardext.mirrored = 1;
     }
-    S("GL_OES_mapbuffer ", mapbuffer, 1);
+    S("GL_OES_mapbuffer ", mapbuffer, 0);
     S("GL_OES_element_index_uint ", elementuint, 1);
     S("GL_OES_packed_depth_stencil ", depthstencil, 1);
     S("GL_OES_depth24 ", depth24, 1);

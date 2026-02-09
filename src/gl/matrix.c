@@ -7,6 +7,8 @@
 #include "glstate.h"
 #include "init.h"
 #include "loader.h"
+#include <math.h>
+#include <string.h>
 
 //#define DEBUG
 #ifdef DEBUG
@@ -24,6 +26,7 @@ void alloc_matrix(matrixstack_t **matrixstack, int depth) {
 
 #define TOP(A) (glstate->A->stack+(glstate->A->top*16))
 
+// Helper function to get current matrix pointer
 static GLfloat* update_current_mat() {
 	switch(glstate->matrix_mode) {
 		case GL_MODELVIEW:
@@ -39,6 +42,7 @@ static GLfloat* update_current_mat() {
 	}
 }
 
+// Helper to update identity flag
 static int update_current_identity(int I) {
 	switch(glstate->matrix_mode) {
 		case GL_MODELVIEW:
@@ -56,7 +60,7 @@ static int update_current_identity(int I) {
 
 static int send_to_hardware() {
 	if(hardext.esversion>1)
-		return 0;
+		return 0; // GLES2+ uses shaders, manual upload
 	switch(glstate->matrix_mode) {
 		case GL_PROJECTION:
 			return 1;
@@ -64,9 +68,6 @@ static int send_to_hardware() {
 			return 1;
 		case GL_TEXTURE:
 			return (globals4es.texmat)?1:0;
-		/*default:
-			if(glstate->matrix_mode>=GL_MATRIX0_ARB && glstate->matrix_mode<GL_MATRIX0_ARB+MAX_ARB_MATRIX)
-				return 0;*/
 	}
 	return 0;
 }
@@ -85,7 +86,7 @@ DBG(printf("init_matrix(%p)\n", glstate);)
 	glstate->mvp_matrix_dirty = 0;
 	set_identity(glstate->inv_mv_matrix);
 	glstate->inv_mv_matrix_dirty = 0;
-	// no identity function for 3x3 matrix
+	
 	memset(glstate->normal_matrix, 0, 9*sizeof(GLfloat));
 	glstate->normal_matrix[0] = glstate->normal_matrix[4] = glstate->normal_matrix[8] = 1.0f;
 	glstate->normal_matrix_dirty = 1;
@@ -102,7 +103,7 @@ DBG(printf("init_matrix(%p)\n", glstate);)
 }
 
 void set_fpe_textureidentity() {
-	if(glstate->texture_matrix[glstate->texture.active]->identity)	// inverted in fpe flags
+	if(glstate->texture_matrix[glstate->texture.active]->identity)
 		glstate->fpe_state->texture[glstate->texture.active].texmat = 0;
 	else
 		glstate->fpe_state->texture[glstate->texture.active].texmat = 1;
@@ -112,7 +113,7 @@ void APIENTRY_GL4ES gl4es_glMatrixMode(GLenum mode) {
 DBG(printf("glMatrixMode(%s), list=%p\n", PrintEnum(mode), glstate->list.active);)
 	noerrorShim();
 	if (glstate->list.active && glstate->list.pending && glstate->matrix_mode==GL_MODELVIEW && mode==GL_MODELVIEW) {
-		return;	// nothing to do...
+		return;
 	}
 	PUSH_IF_COMPILING(glMatrixMode);
 
@@ -132,10 +133,8 @@ DBG(printf("glPushMatrix(), list=%p\n", glstate->list.active);)
 	if (glstate->list.active && !glstate->list.pending) {
 		PUSH_IF_COMPILING(glPushMatrix);
 	}
-	// get matrix mode
 	GLint matrix_mode = glstate->matrix_mode;
 	noerrorShim();
-	// go...
 	switch(matrix_mode) {
 		#define P(A, B) if(glstate->A->top+1<MAX_STACK_##B) { \
 			memcpy(TOP(A)+16, TOP(A), 16*sizeof(GLfloat)); \
@@ -154,10 +153,7 @@ DBG(printf("glPushMatrix(), list=%p\n", glstate->list.active);)
 			if(glstate->matrix_mode>=GL_MATRIX0_ARB && glstate->matrix_mode<GL_MATRIX0_ARB+MAX_ARB_MATRIX) {
 				P(arb_matrix[glstate->matrix_mode-GL_MATRIX0_ARB], ARB_MATRIX);
 			} else {
-				//Warning?
 				errorShim(GL_INVALID_OPERATION);
-				//LOGE("PushMatrix with Unrecognise matrix mode (0x%04X)\n", matrix_mode);
-				//gles_glPushMatrix();
 			}
 		#undef P
 	}
@@ -171,16 +167,13 @@ DBG(printf("glPopMatrix(), list=%p\n", glstate->list.active);)
 	 && glstate->matrix_mode==GL_MODELVIEW
 	 && !(glstate->polygon_mode==GL_LINE) 
 	 && glstate->list.pending) {
-		// check if pop'd matrix is the same as actual...
 		if(memcmp(TOP(modelview_matrix)-16, TOP(modelview_matrix), 16*sizeof(GLfloat))==0) {
 			--glstate->modelview_matrix->top;
 			return;
 		}
 	}
 	PUSH_IF_COMPILING(glPopMatrix);
-	// get matrix mode
 	GLint matrix_mode = glstate->matrix_mode;
-	// go...
 	noerrorShim();
 	switch(matrix_mode) {
 		#define P(A) if(glstate->A->top) { \
@@ -207,10 +200,7 @@ DBG(printf("glPopMatrix(), list=%p\n", glstate->list.active);)
 			if(glstate->matrix_mode>=GL_MATRIX0_ARB && glstate->matrix_mode<GL_MATRIX0_ARB+MAX_ARB_MATRIX) {
 				P(arb_matrix[glstate->matrix_mode-GL_MATRIX0_ARB]);
 			} else {
-				//Warning?
 				errorShim(GL_INVALID_OPERATION);
-				//LOGE("PopMatrix with Unrecognise matrix mode (0x%04X)\n", matrix_mode);
-				//gles_glPopMatrix();
 			}
 		#undef P
 	}
@@ -238,7 +228,7 @@ DBG(printf("glLoadMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1],
     if(send_to_hardware()) {
 		LOAD_GLES(glLoadMatrixf);
 		LOAD_GLES(glLoadIdentity);
-		if(id) gles_glLoadIdentity();	// in case the driver as some special optimisations
+		if(id) gles_glLoadIdentity();
 		else gles_glLoadMatrixf(m);
 	}
 }
@@ -249,7 +239,6 @@ DBG(printf("glMultMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1],
 		if(glstate->list.pending) gl4es_flush();
 		else {
 			if(glstate->list.active->stage == STAGE_MATRIX) {
-				// multiply the matrix mith the current one....
 				matrix_mul(glstate->list.active->matrix_val, m, glstate->list.active->matrix_val);
 				return;
 			}
@@ -268,11 +257,10 @@ DBG(printf("glMultMatrix(%f, %f, %f, %f, %f, %f, %f...), list=%p\n", m[0], m[1],
 		glstate->mvp_matrix_dirty = 1;
 	else if((glstate->matrix_mode==GL_TEXTURE) && glstate->fpe_state)
 		set_fpe_textureidentity();
-	DBG(printf(" => (%f, %f, %f, %f, %f, %f, %f...)\n", current_mat[0], current_mat[1], current_mat[2], current_mat[3], current_mat[4], current_mat[5], current_mat[6]);)
 	if(send_to_hardware()) {
 		LOAD_GLES(glLoadMatrixf);
 		LOAD_GLES(glLoadIdentity);
-		if(id) gles_glLoadIdentity();	// in case the driver as some special optimisations
+		if(id) gles_glLoadIdentity();
 		else gles_glLoadMatrixf(current_mat);
 	}
 }
@@ -302,36 +290,90 @@ DBG(printf("glLoadIdentity(), list=%p\n", glstate->list.active);)
 	}
 }
 
+// OPTIMIZED: Direct Math Translation (Avoids generic Matrix Mul)
 void APIENTRY_GL4ES gl4es_glTranslatef(GLfloat x, GLfloat y, GLfloat z) {
 DBG(printf("glTranslatef(%f, %f, %f), list=%p\n", x, y, z, glstate->list.active);)
-	// create a translation matrix than multiply it...
-	GLfloat tmp[16];
-	set_identity(tmp);
-	tmp[12+0] = x;
-	tmp[12+1] = y;
-	tmp[12+2] = z;
-	gl4es_glMultMatrixf(tmp);
+	if (glstate->list.active) {
+		// Fallback for display lists (safety first)
+		GLfloat tmp[16];
+		set_identity(tmp);
+		tmp[12] = x; tmp[13] = y; tmp[14] = z;
+		gl4es_glMultMatrixf(tmp);
+		return;
+	}
+
+	GLfloat *m = update_current_mat();
+	// OpenGL Post-Multiplication: M' = M * T
+    // Only the 4th column (index 12, 13, 14, 15) changes.
+	m[12] = m[0]*x + m[4]*y + m[8]*z + m[12];
+	m[13] = m[1]*x + m[5]*y + m[9]*z + m[13];
+	m[14] = m[2]*x + m[6]*y + m[10]*z + m[14];
+	m[15] = m[3]*x + m[7]*y + m[11]*z + m[15];
+
+	update_current_identity(0);
+	if(glstate->matrix_mode==GL_MODELVIEW) {
+		glstate->normal_matrix_dirty = glstate->inv_mv_matrix_dirty = 1;
+        glstate->mvp_matrix_dirty = 1;
+    } else if(glstate->matrix_mode==GL_PROJECTION) {
+		glstate->mvp_matrix_dirty = 1;
+    } else if((glstate->matrix_mode==GL_TEXTURE) && glstate->fpe_state) {
+		set_fpe_textureidentity();
+    }
+    
+    if(send_to_hardware()) {
+		LOAD_GLES(glLoadMatrixf);
+		gles_glLoadMatrixf(m);
+	}
 }
 
+// OPTIMIZED: Direct Math Scale (Avoids generic Matrix Mul)
 void APIENTRY_GL4ES gl4es_glScalef(GLfloat x, GLfloat y, GLfloat z) {
 DBG(printf("glScalef(%f, %f, %f), list=%p\n", x, y, z, glstate->list.active);)
-	// create a scale matrix than multiply it...
-	GLfloat tmp[16];
-	memset(tmp, 0, 16*sizeof(GLfloat));
-	tmp[0+0] = x;
-	tmp[1+4] = y;
-	tmp[2+8] = z;
-	tmp[3+12] = 1.0f;
-	gl4es_glMultMatrixf(tmp);
+    if (glstate->list.active) {
+        GLfloat tmp[16];
+        memset(tmp, 0, 16*sizeof(GLfloat));
+        tmp[0] = x; tmp[5] = y; tmp[10] = z; tmp[15] = 1.0f;
+        gl4es_glMultMatrixf(tmp);
+        return;
+    }
+
+	GLfloat *m = update_current_mat();
+    // OpenGL Post-Multiplication: M' = M * S
+    // Column 0 * x, Column 1 * y, Column 2 * z
+    m[0] *= x; m[1] *= x; m[2] *= x; m[3] *= x;
+    m[4] *= y; m[5] *= y; m[6] *= y; m[7] *= y;
+    m[8] *= z; m[9] *= z; m[10] *= z; m[11] *= z;
+
+	update_current_identity(0);
+	if(glstate->matrix_mode==GL_MODELVIEW) {
+		glstate->normal_matrix_dirty = glstate->inv_mv_matrix_dirty = 1;
+        glstate->mvp_matrix_dirty = 1;
+    } else if(glstate->matrix_mode==GL_PROJECTION) {
+		glstate->mvp_matrix_dirty = 1;
+    } else if((glstate->matrix_mode==GL_TEXTURE) && glstate->fpe_state) {
+		set_fpe_textureidentity();
+    }
+
+    if(send_to_hardware()) {
+		LOAD_GLES(glLoadMatrixf);
+		gles_glLoadMatrixf(m);
+	}
 }
 
 void APIENTRY_GL4ES gl4es_glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z) {
 DBG(printf("glRotatef(%f, %f, %f, %f), list=%p\n", angle, x, y, z, glstate->list.active);)
-	// create a rotation matrix than multiply it...
+	if((x==0 && y==0 && z==0) || angle==0)
+		return;
+
+    // Check for display list or basic axis rotation optimization later?
+    // For now, rotation is complex enough that creating the matrix is okay, 
+    // BUT we should avoid allocating it on stack if possible.
+    // However, keeping the original logic here is safer for rotation stability 
+    // unless we implement Quaternions which is overkill here.
+    // We stick to the standard implementation but ensure it goes through glMultMatrixf properly.
+
 	GLfloat tmp[16];
 	memset(tmp, 0, 16*sizeof(GLfloat));
-	if((x==0 && y==0 && z==0) || angle==0)
-		return;	// nothing to do
 	// normalize x y z
 	GLfloat l = 1.0f/sqrtf(x*x+y*y+z*z);
 	x=x*l; y=y*l; z=z*l;
@@ -346,7 +388,7 @@ DBG(printf("glRotatef(%f, %f, %f, %f), list=%p\n", angle, x, y, z, glstate->list
 	tmp[2+0] = x*z*c1-y*s; tmp[2+4] = y*z*c1+x*s; tmp[2+8] = z*z*c1+c;
 
 	tmp[3+12] = 1.0f;
-	// done...
+	
 	gl4es_glMultMatrixf(tmp);
 }
 
