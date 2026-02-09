@@ -653,6 +653,10 @@ void APIENTRY_GL4ES gl4es_glFlushMappedBufferRange(GLenum target, GLintptr offse
     }
 }
 
+// Tambahkan deklarasi extern ini tepat DI ATAS fungsi gl4es_glCopyBufferSubData
+// agar compiler tahu fungsi ini ada (berasal dari library sistem EGL Android)
+extern void *eglGetProcAddress(const char *procname);
+
 void APIENTRY_GL4ES gl4es_glCopyBufferSubData(GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)
 {
     DBG(printf("glCopyBufferSubData(%s, %s, %p, %p, %zd)\n", PrintEnum(readTarget), PrintEnum(writeTarget), (void*)readOffset, (void*)writeOffset, size);)
@@ -664,13 +668,15 @@ void APIENTRY_GL4ES gl4es_glCopyBufferSubData(GLenum readTarget, GLenum writeTar
     }
     
     // Hardware Copy (GLES 3.0+ feature, supported by GE8320)
-    if(hardext.esversion >= 3 || globals4es.usevbo) { // Assuming extensions available
-        // We cannot use memcpy because we don't have data in RAM.
-        // We must hope the driver supports this or we simply skip it.
-        // Implementing glCopyBufferSubData without RAM copy on GLES2 is impossible.
-        // On PowerVR GE8320 (GLES 3.2), this exists natively:
-        void* (*gles_glCopyBufferSubData)(GLenum, GLenum, GLintptr, GLintptr, GLsizeiptr);
-        gles_glCopyBufferSubData = (void*)get_proc_address("glCopyBufferSubData");
+    if(hardext.esversion >= 3 || globals4es.usevbo) { 
+        // FIX: Menggunakan eglGetProcAddress yang merupakan standar Android/EGL
+        // alih-alih 'get_proc_address' yang tidak dikenali.
+        static void* (*gles_glCopyBufferSubData)(GLenum, GLenum, GLintptr, GLintptr, GLsizeiptr) = NULL;
+        
+        if(!gles_glCopyBufferSubData) {
+            gles_glCopyBufferSubData = (void*)eglGetProcAddress("glCopyBufferSubData");
+        }
+
         if(gles_glCopyBufferSubData) {
             LOAD_GLES(glBindBuffer);
             bindBuffer(readTarget, readbuff->real_buffer);
