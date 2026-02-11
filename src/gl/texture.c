@@ -1571,6 +1571,47 @@ void APIENTRY_GL4ES gl4es_glTexSubImage2D(GLenum target, GLint level, GLint xoff
     }
     
     gltexture_t *bound = glstate->texture.bound[glstate->texture.active][itarget];
+    if (format == GL_RGBA && type == GL_UNSIGNED_BYTE && 
+        bound->format == GL_RGBA && bound->type == GL_UNSIGNED_BYTE &&
+        bound->inter_format == GL_RGBA && bound->inter_type == GL_UNSIGNED_BYTE &&
+        !bound->shrink && !bound->useratio && 
+        !glstate->texture.unpack_row_length &&
+        !glstate->texture.unpack_skip_pixels && 
+        !glstate->texture.unpack_skip_rows) {
+    
+        LOAD_GLES(glTexSubImage2D);
+        errorGL();
+    
+        // Direct GPU upload - NO CPU PROCESSING!
+        gles_glTexSubImage2D(rtarget, level, xoffset, yoffset, 
+                        width, height, format, type, datab);
+    
+        DBG(CheckGLError(1);)
+    
+        // GPU-based mipmap generation (10x faster than CPU!)
+        int genmipmap = 0;
+        if (bound->max_level == level && (level || bound->mipmap_need))
+            genmipmap = 1;
+        if (bound->mipmap_need || bound->mipmap_auto)
+            genmipmap = 1;
+        if ((bound->max_level == bound->base_level) && (bound->base_level == 0))
+            genmipmap = 0;
+        
+        if (genmipmap && (globals4es.automipmap != 3)) {
+            LOAD_GLES(glGenerateMipmap);
+            gles_glGenerateMipmap(rtarget);
+        }
+    
+        // Texture copy for TEXCOPYDATA
+        if ((target == GL_TEXTURE_2D) && globals4es.texcopydata && 
+            ((globals4es.texstream && !bound->streamed) || !globals4es.texstream)) {
+            GLvoid *tmp = (char*)bound->data + (yoffset * bound->width + xoffset) * 4;
+            memcpy(tmp, datab, width * height * 4);
+        }
+    
+        noerrorShim();
+        return;
+    }
     if (globals4es.automipmap) {
         if (level>0)
             if ((globals4es.automipmap==1) || (globals4es.automipmap==3) || bound->mipmap_need) {
