@@ -191,6 +191,9 @@ void BuildExtensionsList() {
             strcat(extensions, "GL_EXT_depth_texture ");
             strcat(extensions, "GL_ARB_depth_texture ");
         }
+        if(hardext.occlusionquery) {
+            strcat(extensions, "GL_ARB_occlusion_query ");
+        }
         if(hardext.esversion>1) {
             strcat(extensions, "GL_EXT_fog_coord ");
             strcat(extensions, "GL_EXT_separate_specular_color ");
