@@ -12,6 +12,8 @@
 #include "gl4es.h"
 #include "glstate.h"
 #include "loader.h"
+#include "logs.h"  // ← TAMBAH INI untuk LOGD
+
 #ifdef _WIN32
 #ifdef _WINBASE_
 #define GSM_CAST(c) ((LPFILETIME)c)
@@ -22,7 +24,7 @@ void __stdcall GetSystemTimeAsFileTime(unsigned __int64*);
 #endif
 #endif
 
-// OpenGL ES extension constants (may not be in headers)
+// OpenGL ES extension constants
 #ifndef GL_ANY_SAMPLES_PASSED_EXT
 #define GL_ANY_SAMPLES_PASSED_EXT 0x8C2F
 #endif
@@ -83,10 +85,10 @@ void del_querie(GLuint querie) {
         kh_del(queries, list, k);
     }
     if(s) {
-        // Delete hardware query object if it exists
         if(s->use_hardware && s->gles_id) {
             LOAD_GLES_EXT(glDeleteQueriesEXT);
             if(gles_glDeleteQueriesEXT) {
+                SHUT_LOGD("[QUERY] Deleting hardware query ID=%u, GLES_ID=%u\n", querie, s->gles_id);
                 gles_glDeleteQueriesEXT(1, &s->gles_id);
             }
         }
@@ -120,15 +122,14 @@ void APIENTRY_GL4ES gl4es_glGenQueries(GLsizei n, GLuint * ids) {
     for (int i=0; i<n; i++) {
         ids[i] = new_query(++glstate->queries.last_query);
     }
+    SHUT_LOGD("[QUERY] glGenQueries(n=%d) -> IDs: %u...\n", n, ids[0]);
 }
 
 GLboolean APIENTRY_GL4ES gl4es_glIsQuery(GLuint id) {
     if(glstate->list.compiling) {errorShim(GL_INVALID_OPERATION); return GL_FALSE;}
     FLUSH_BEGINEND;
     glquery_t *querie = find_query(id);
-    if(querie)
-        return GL_TRUE;
-    return GL_FALSE;
+    return querie ? GL_TRUE : GL_FALSE;
 }
 
 void APIENTRY_GL4ES gl4es_glDeleteQueries(GLsizei n, const GLuint* ids) {
@@ -140,12 +141,16 @@ void APIENTRY_GL4ES gl4es_glDeleteQueries(GLsizei n, const GLuint* ids) {
     noerrorShim();
     if(!n)
         return;
+    SHUT_LOGD("[QUERY] glDeleteQueries(n=%d)\n", n);
     for(int i=0; i<n; ++i)
         del_querie(ids[i]);
 }
 
 void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
     FLUSH_BEGINEND;
+    
+    SHUT_LOGD("[QUERY] glBeginQuery(target=0x%04X, id=%u)\n", target, id);
+    
     glquery_t *query = find_query(id);
     if(!query) {
         khint_t k;
@@ -156,13 +161,15 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
         query->id = id;
         query->gles_id = 0;
         query->use_hardware = 0;
+        SHUT_LOGD("[QUERY] Created new query object id=%u\n", id);
     }
+    
     if(query->active || find_query_target(target)) {
+        SHUT_LOGD("[QUERY] ERROR: Query already active or target in use\n");
         errorShim(GL_INVALID_OPERATION);
         return;
     }
     
-    // Validate target
     switch(target) {
         case GL_SAMPLES_PASSED:
         case GL_ANY_SAMPLES_PASSED:
@@ -172,6 +179,7 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
         case GL_TIME_ELAPSED:
             break;
         default:
+            SHUT_LOGD("[QUERY] ERROR: Invalid target 0x%04X\n", target);
             errorShim(GL_INVALID_ENUM);
             return;
     }
@@ -180,55 +188,79 @@ void APIENTRY_GL4ES gl4es_glBeginQuery(GLenum target, GLuint id) {
     query->num = 0;
     query->active = 1;
     
-    // ========== HARDWARE ACCELERATION PATH ==========
-    // Use GL_EXT_occlusion_query_boolean for occlusion queries if available
+    // Hardware path
     if(hardext.occlusionquery && 
        (target == GL_SAMPLES_PASSED || 
         target == GL_ANY_SAMPLES_PASSED || 
         target == GL_ANY_SAMPLES_PASSED_CONSERVATIVE)) {
         
+        SHUT_LOGD("[QUERY] Attempting hardware path...\n");
+        SHUT_LOGD("[QUERY] hardext.occlusionquery = %d\n", hardext.occlusionquery);
+        
         LOAD_GLES_EXT(glGenQueriesEXT);
         LOAD_GLES_EXT(glBeginQueryEXT);
         
+        SHUT_LOGD("[QUERY] glGenQueriesEXT ptr = %p\n", gles_glGenQueriesEXT);
+        SHUT_LOGD("[QUERY] glBeginQueryEXT ptr = %p\n", gles_glBeginQueryEXT);
+        
         if(gles_glGenQueriesEXT && gles_glBeginQueryEXT) {
-            // Create GLES query object if needed
             if(!query->gles_id) {
                 gles_glGenQueriesEXT(1, &query->gles_id);
+                SHUT_LOGD("[QUERY] Created GLES query object: GLES_ID=%u\n", query->gles_id);
             }
             
-            // Map OpenGL targets to OpenGL ES targets
             GLenum gles_target;
             if(target == GL_SAMPLES_PASSED) {
-                // GL_SAMPLES_PASSED → GL_ANY_SAMPLES_PASSED_EXT
-                // Note: This changes semantics from count to boolean,
-                // but it's sufficient for visibility testing (Minecraft use case)
                 gles_target = GL_ANY_SAMPLES_PASSED_EXT;
+                SHUT_LOGD("[QUERY] Mapping GL_SAMPLES_PASSED -> GL_ANY_SAMPLES_PASSED_EXT\n");
             } else {
                 gles_target = target;
             }
             
+            SHUT_LOGD("[QUERY] Calling gles_glBeginQueryEXT(0x%04X, %u)\n", gles_target, query->gles_id);
             gles_glBeginQueryEXT(gles_target, query->gles_id);
-            query->use_hardware = 1;
+            
+            // Check for errors
+            LOAD_GLES(glGetError);
+            GLenum err = gles_glGetError();
+            if(err != GL_NO_ERROR) {
+                SHUT_LOGD("[QUERY] ERROR from GLES backend: 0x%04X\n", err);
+                query->use_hardware = 0;
+                query->start = get_clock() - glstate->queries.start;
+            } else {
+                query->use_hardware = 1;
+                SHUT_LOGD("[QUERY] Hardware query started successfully!\n");
+            }
+            
             noerrorShim();
             return;
+        } else {
+            SHUT_LOGD("[QUERY] GLES functions not available, falling back to software\n");
         }
+    } else {
+        SHUT_LOGD("[QUERY] Software path (hardext.occlusionquery=%d, target=0x%04X)\n", 
+             hardext.occlusionquery, target);
     }
     
-    // ========== SOFTWARE FALLBACK PATH ==========
+    // Software fallback
     query->start = get_clock() - glstate->queries.start;
     query->use_hardware = 0;
+    SHUT_LOGD("[QUERY] Using software stub\n");
     noerrorShim();
 }
 
 void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
     FLUSH_BEGINEND;
+    
+    SHUT_LOGD("[QUERY] glEndQuery(target=0x%04X)\n", target);
+    
     glquery_t *query = find_query_target(target);
     if(!query) {
+        SHUT_LOGD("[QUERY] ERROR: No active query for target 0x%04X\n", target);
         errorShim(GL_INVALID_OPERATION);
         return;
     }
     
-    // Validate target
     switch(target) {
         case GL_SAMPLES_PASSED:
         case GL_ANY_SAMPLES_PASSED:
@@ -244,8 +276,8 @@ void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
     
     query->active = 0;
     
-    // ========== HARDWARE ACCELERATION PATH ==========
     if(query->use_hardware) {
+        SHUT_LOGD("[QUERY] Ending hardware query...\n");
         LOAD_GLES_EXT(glEndQueryEXT);
         
         if(gles_glEndQueryEXT) {
@@ -257,29 +289,33 @@ void APIENTRY_GL4ES gl4es_glEndQuery(GLenum target) {
             }
             
             gles_glEndQueryEXT(gles_target);
+            SHUT_LOGD("[QUERY] Hardware query ended\n");
             noerrorShim();
             return;
         }
     }
     
-    // ========== SOFTWARE FALLBACK PATH ==========
     query->start = (get_clock() - glstate->queries.start) - query->start;
+    SHUT_LOGD("[QUERY] Software query ended\n");
     noerrorShim();
 }
 
 void APIENTRY_GL4ES gl4es_glGetQueryiv(GLenum target, GLenum pname, GLint* params) {
     FLUSH_BEGINEND;
-
-    glquery_t *q = find_query_target(target);
     
-    // GL_CURRENT_QUERY doesn't require an active query
+    SHUT_LOGD("[QUERY] glGetQueryiv(target=0x%04X, pname=0x%04X)\n", target, pname);
+    
     if(pname == GL_CURRENT_QUERY) {
+        glquery_t *q = find_query_target(target);
         *params = q ? q->id : 0;
+        SHUT_LOGD("[QUERY] GL_CURRENT_QUERY = %d\n", *params);
         noerrorShim();
         return;
     }
     
+    glquery_t *q = find_query_target(target);
     if(!q) {
+        SHUT_LOGD("[QUERY] ERROR: No active query for target\n");
         errorShim(GL_INVALID_OPERATION);
         return;
     }
@@ -291,13 +327,13 @@ void APIENTRY_GL4ES gl4es_glGetQueryiv(GLenum target, GLenum pname, GLint* param
             break;
         case GL_QUERY_COUNTER_BITS:
             if(q->target == GL_TIME_ELAPSED) {
-                *params = 32;  // timestamp has precision
+                *params = 32;
             } else if(q->use_hardware) {
-                // Hardware boolean query - return 1 bit (0 or 1)
-                *params = 1;
+                *params = 32;  // ← UBAH dari 1 ke 32 untuk compatibility
             } else {
-                *params = 0;  // software stub has no counter
+                *params = 0;
             }
+            SHUT_LOGD("[QUERY] GL_QUERY_COUNTER_BITS = %d (use_hardware=%d)\n", *params, q->use_hardware);
             break;
         default:
             errorShim(GL_INVALID_ENUM);
@@ -306,9 +342,12 @@ void APIENTRY_GL4ES gl4es_glGetQueryiv(GLenum target, GLenum pname, GLint* param
 
 void APIENTRY_GL4ES gl4es_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* params) {
     FLUSH_BEGINEND;
+    
+    SHUT_LOGD("[QUERY] glGetQueryObjectiv(id=%u, pname=0x%04X)\n", id, pname);
 
     glquery_t *query = find_query(id);
     if(!query) {
+        SHUT_LOGD("[QUERY] ERROR: Query %u not found\n", id);
         errorShim(GL_INVALID_OPERATION);
         return;
     }
@@ -321,11 +360,14 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* par
                     GLuint available;
                     gles_glGetQueryObjectuivEXT(query->gles_id, GL_QUERY_RESULT_AVAILABLE_EXT, &available);
                     *params = (GLint)available;
+                    SHUT_LOGD("[QUERY] Hardware GL_QUERY_RESULT_AVAILABLE = %d\n", *params);
                 } else {
-                    *params = GL_TRUE;  // fallback
+                    *params = GL_TRUE;
+                    SHUT_LOGD("[QUERY] Software GL_QUERY_RESULT_AVAILABLE = TRUE\n");
                 }
             } else {
-                *params = GL_TRUE;  // software stub always ready
+                *params = GL_TRUE;
+                SHUT_LOGD("[QUERY] Stub GL_QUERY_RESULT_AVAILABLE = TRUE\n");
             }
             break;
             
@@ -336,18 +378,15 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* par
                 if(gles_glGetQueryObjectuivEXT) {
                     GLuint gles_result;
                     gles_glGetQueryObjectuivEXT(query->gles_id, GL_QUERY_RESULT_EXT, &gles_result);
-                    
-                    // Convert boolean result to integer
-                    // GL_EXT_occlusion_query_boolean returns 0 or GL_TRUE
-                    // We emulate a sample count: 0 = no samples, 1 = samples passed
-                    // This is sufficient for Minecraft's visibility testing
                     *params = gles_result ? 1 : 0;
+                    SHUT_LOGD("[QUERY] Hardware GL_QUERY_RESULT = %d (raw GLES=%u)\n", *params, gles_result);
                 } else {
                     *params = 0;
+                    SHUT_LOGD("[QUERY] Software GL_QUERY_RESULT = 0\n");
                 }
             } else {
-                // Software fallback
                 *params = (query->target==GL_TIME_ELAPSED) ? (GLint)query->start : query->num;
+                SHUT_LOGD("[QUERY] Stub GL_QUERY_RESULT = %d\n", *params);
             }
             break;
             
@@ -360,9 +399,12 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectiv(GLuint id, GLenum pname, GLint* par
 
 void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* params) {
     FLUSH_BEGINEND;
+    
+    SHUT_LOGD("[QUERY] glGetQueryObjectuiv(id=%u, pname=0x%04X)\n", id, pname);
 
     glquery_t *query = find_query(id);
     if(!query) {
+        SHUT_LOGD("[QUERY] ERROR: Query %u not found\n", id);
         errorShim(GL_INVALID_OPERATION);
         return;
     }
@@ -373,11 +415,14 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
                 LOAD_GLES_EXT(glGetQueryObjectuivEXT);
                 if(gles_glGetQueryObjectuivEXT) {
                     gles_glGetQueryObjectuivEXT(query->gles_id, GL_QUERY_RESULT_AVAILABLE_EXT, params);
+                    SHUT_LOGD("[QUERY] Hardware GL_QUERY_RESULT_AVAILABLE = %u\n", *params);
                 } else {
                     *params = GL_TRUE;
+                    SHUT_LOGD("[QUERY] Software GL_QUERY_RESULT_AVAILABLE = TRUE\n");
                 }
             } else {
-                *params = GL_TRUE;  // software stub always ready
+                *params = GL_TRUE;
+                SHUT_LOGD("[QUERY] Stub GL_QUERY_RESULT_AVAILABLE = TRUE\n");
             }
             break;
             
@@ -388,16 +433,15 @@ void APIENTRY_GL4ES gl4es_glGetQueryObjectuiv(GLuint id, GLenum pname, GLuint* p
                 if(gles_glGetQueryObjectuivEXT) {
                     GLuint gles_result;
                     gles_glGetQueryObjectuivEXT(query->gles_id, GL_QUERY_RESULT_EXT, &gles_result);
-                    
-                    // Convert boolean to integer count
-                    // 0 = no samples visible, 1 = samples visible
                     *params = gles_result ? 1 : 0;
+                    SHUT_LOGD("[QUERY] Hardware GL_QUERY_RESULT = %u (raw GLES=%u)\n", *params, gles_result);
                 } else {
                     *params = 0;
+                    SHUT_LOGD("[QUERY] Software GL_QUERY_RESULT = 0\n");
                 }
             } else {
-                // Software fallback
                 *params = (query->target==GL_TIME_ELAPSED) ? (GLuint)query->start : (GLuint)query->num;
+                SHUT_LOGD("[QUERY] Stub GL_QUERY_RESULT = %u\n", *params);
             }
             break;
             
