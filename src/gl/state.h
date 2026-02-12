@@ -357,6 +357,8 @@ typedef struct {
     int num;
     int active;
     GLuint start;
+    GLuint gles_id;
+    int use_hardware;
 } glquery_t;
 
 KHASH_MAP_DECLARE_INT(queries, glquery_t *)

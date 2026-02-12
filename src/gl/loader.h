@@ -53,6 +53,15 @@ typedef EGLSyncKHR (*eglCreateSyncKHR_PTR)(EGLDisplay dpy, EGLenum type, const E
 typedef EGLSyncKHR (*eglDestroySyncKHR_PTR)(EGLDisplay dpy, EGLSyncKHR sync);
 typedef EGLint (*eglClientWaitSyncKHR_PTR)(EGLDisplay dpy, EGLSyncKHR sync, EGLint flags, EGLTimeKHR timeout);
 
+// Occlusion Query EXT function pointers
+typedef void (*glGenQueriesEXT_PTR)(GLsizei n, GLuint *ids);
+typedef void (*glDeleteQueriesEXT_PTR)(GLsizei n, const GLuint *ids);
+typedef GLboolean (*glIsQueryEXT_PTR)(GLuint id);
+typedef void (*glBeginQueryEXT_PTR)(GLenum target, GLuint id);
+typedef void (*glEndQueryEXT_PTR)(GLenum target);
+typedef void (*glGetQueryivEXT_PTR)(GLenum target, GLenum pname, GLint *params);
+typedef void (*glGetQueryObjectuivEXT_PTR)(GLuint id, GLenum pname, GLuint *params);
+
 typedef NativePixmapType (*egl_create_pixmap_ID_mapping_PTR)(void *pixmap);
 typedef NativePixmapType (*egl_destroy_pixmap_ID_mapping_PTR)(int id);
 #ifdef TEXSTREAM

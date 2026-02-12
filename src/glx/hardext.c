@@ -359,6 +359,16 @@ void GetHardwareExtensions(int notest)
             }
         }
         S("GL_EXT_frag_depth ", fragdepth, 1);
+        // Occlusion Query detection
+        S("GL_EXT_occlusion_query_boolean ", occlusionquery, 1);
+        if(!hardext.occlusionquery) {
+            // Some drivers don't advertise the extension but support the functions
+            LOAD_GLES_EXT(glBeginQueryEXT);
+            if(gles_glBeginQueryEXT != NULL) {
+                hardext.occlusionquery = 1;
+                SHUT_LOGD("Extension GL_EXT_occlusion_query_boolean found via function probe\n");
+            }
+        }
         gles_glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &hardext.maxvattrib);
         SHUT_LOGD("Max vertex attrib: %d\n", hardext.maxvattrib);
         S("GL_OES_standard_derivatives ", derivatives, 1);
