@@ -305,38 +305,53 @@ void APIENTRY_GL4ES gl4es_glGetQueryiv(GLenum target, GLenum pname, GLint* param
     
     SHUT_LOGD("[QUERY] glGetQueryiv(target=0x%04X, pname=0x%04X)\n", target, pname);
     
-    if(pname == GL_CURRENT_QUERY) {
-        glquery_t *q = find_query_target(target);
-        *params = q ? q->id : 0;
-        SHUT_LOGD("[QUERY] GL_CURRENT_QUERY = %d\n", *params);
-        noerrorShim();
-        return;
-    }
-    
-    glquery_t *q = find_query_target(target);
-    if(!q) {
-        SHUT_LOGD("[QUERY] ERROR: No active query for target\n");
-        errorShim(GL_INVALID_OPERATION);
-        return;
-    }
-
     noerrorShim();
+    
     switch (pname) {
-        case GL_CURRENT_QUERY:
-            *params = q->id;
+        case GL_CURRENT_QUERY: {
+            glquery_t *q = find_query_target(target);
+            *params = q ? q->id : 0;
+            SHUT_LOGD("[QUERY] GL_CURRENT_QUERY = %d\n", *params);
             break;
-        case GL_QUERY_COUNTER_BITS:
-            if(q->target == GL_TIME_ELAPSED) {
-                *params = 32;
-            } else if(q->use_hardware) {
-                *params = 32;  // ← UBAH dari 1 ke 32 untuk compatibility
-            } else {
-                *params = 0;
+        }
+        
+        case GL_QUERY_COUNTER_BITS: {
+            // GL_QUERY_COUNTER_BITS does NOT require an active query
+            // This is the critical detection test that OptiFine performs!
+            switch(target) {
+                case GL_TIME_ELAPSED:
+                case GL_TIMESTAMP:
+                    *params = 32;
+                    break;
+                    
+                case GL_SAMPLES_PASSED:
+                case GL_ANY_SAMPLES_PASSED:
+                case GL_ANY_SAMPLES_PASSED_CONSERVATIVE:
+                    if(hardext.occlusionquery) {
+                        *params = 32;  // Report 32 bits (compatible with desktop GL)
+                    } else {
+                        *params = 0;   // No hardware support
+                    }
+                    break;
+                    
+                case GL_PRIMITIVES_GENERATED:
+                case GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN:
+                    *params = 0;
+                    break;
+                    
+                default:
+                    errorShim(GL_INVALID_ENUM);
+                    return;
             }
-            SHUT_LOGD("[QUERY] GL_QUERY_COUNTER_BITS = %d (use_hardware=%d)\n", *params, q->use_hardware);
+            SHUT_LOGD("[QUERY] GL_QUERY_COUNTER_BITS for target 0x%04X = %d (hardext.occlusionquery=%d)\n", 
+                 target, *params, hardext.occlusionquery);
             break;
+        }
+        
         default:
+            SHUT_LOGD("[QUERY] ERROR: Invalid pname 0x%04X\n", pname);
             errorShim(GL_INVALID_ENUM);
+            return;
     }
 }
 
